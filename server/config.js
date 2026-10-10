@@ -28,7 +28,9 @@ function loadConfig(env = process.env) {
     xClientId: env.X_CLIENT_ID || '', xClientSecret: env.X_CLIENT_SECRET || '',
     metaAppId: env.META_APP_ID || '', metaAppSecret: env.META_APP_SECRET || '',
     threadsAppId: env.THREADS_APP_ID || '', threadsAppSecret: env.THREADS_APP_SECRET || '',
-    tokenKey: env.TOKEN_ENCRYPTION_KEY || '', // optional; otherwise a key file is created in DATA_DIR
+    tokenKey: env.TOKEN_ENCRYPTION_KEY || '',
+    zernioKey: env.ZERNIO_API_KEY || '',      // when set, every network connects through Zernio (no per-network apps)
+    zernioUrl: env.ZERNIO_BASE_URL || 'https://zernio.com/api/v1', // optional; otherwise a key file is created in DATA_DIR
     providerUrls: null,                       // tests point the providers at a mock server
     publishPollMs: env.PUBLISH_POLL_MS ? Number(env.PUBLISH_POLL_MS) : 3000,
     version: '1.0.0'

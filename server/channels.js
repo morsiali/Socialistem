@@ -245,8 +245,10 @@ function createChannels(ctx) {
   const { db, config } = ctx;
   const providers = buildProviders(config);
   const cipher = makeCipher(loadKey(config));
+  const zernio = config.zernioKey ? require('./zernio').createZernio(ctx, { PublishError, cipher }) : null;
 
   function providerList() {
+    if (zernio) return zernio.providerList();
     return Object.values(providers).map(p => ({ id: p.id, name: p.name, networks: p.networks, configured: p.configured }));
   }
   function connectionsFor(userId) {
@@ -256,7 +258,14 @@ function createChannels(ctx) {
     return { id: c.id, network: c.network, accountId: c.account_id, name: c.account_name, handle: c.account_handle, active: !!c.active, status: c.status, lastError: c.last_error, expiresAt: c.expires_at, createdAt: c.created_at };
   }
 
-  function startConnect(user, providerId) {
+  /** Bring the member's account list up to date (Zernio mode only; direct mode is always current). */
+  async function refresh(user, force) {
+    if (!zernio) return;
+    try { await zernio.sync(user, force); } catch (e) { console.error('Channel sync failed', e.message); }
+  }
+
+  async function startConnect(user, providerId) {
+    if (zernio) return zernio.startConnect(user, providerId);
     const p = providers[providerId];
     if (!p) throw Object.assign(new Error('Unknown channel.'), { status: 404 });
     if (!p.configured) throw Object.assign(new Error(`${p.name} is not set up on this server yet.`), { status: 503 });
@@ -268,6 +277,7 @@ function createChannels(ctx) {
   }
 
   async function finishConnect(user, providerId, { code, state, error }) {
+    if (zernio) return zernio.finishConnect(user, providerId, { state, error });
     const row = db.prepare('SELECT * FROM oauth_states WHERE state = ?').get(String(state || ''));
     if (row) db.prepare('DELETE FROM oauth_states WHERE state = ?').run(row.state);
     if (!row || row.user_id !== user.id || row.provider !== providerId || new Date(row.created_at) < new Date(Date.now() - 15 * 60000)) throw new PublishError('That connection link expired. Start again from Settings.', { code: 'bad_state' });
@@ -292,7 +302,8 @@ function createChannels(ctx) {
     return saved;
   }
 
-  function disconnect(user, id) {
+  async function disconnect(user, id) {
+    if (zernio) return zernio.disconnect(user, id);
     const c = db.prepare('SELECT * FROM connections WHERE id = ? AND user_id = ?').get(id, user.id);
     if (!c) return false;
     db.prepare('DELETE FROM connections WHERE id = ?').run(id);
@@ -342,6 +353,7 @@ function createChannels(ctx) {
     const settings = ctx.settings();
     const results = { ...(post.results || {}) };
     const image = mediaFor(userId, post);
+    if (zernio) await refresh({ id: userId });
     for (const network of post.networks || []) {
       if (results[network] && results[network].ok) continue;
       const text = String((post.variants || {})[network] || '').trim();
@@ -352,10 +364,14 @@ function createChannels(ctx) {
           if (settings.practiceMode) { results[network] = { ok: true, simulated: true, at }; continue; }
           throw new PublishError(`No ${NETWORK_NAMES[network] || network} account is connected. Connect one in Settings.`, { code: 'not_connected' });
         }
-        const provider = providers[NETWORK_PROVIDER[network]];
-        if (!provider || !provider.configured) throw new PublishError('This channel is not available on the server right now.', { code: 'not_configured' });
-        const token = await tokenFor(conn);
-        const r = await provider.publish(conn, token, { network, text, image, imageUrl: image ? image.url : '' });
+        let r;
+        if (zernio) r = await zernio.publish(conn, { network, text, image });
+        else {
+          const provider = providers[NETWORK_PROVIDER[network]];
+          if (!provider || !provider.configured) throw new PublishError('This channel is not available on the server right now.', { code: 'not_configured' });
+          const token = await tokenFor(conn);
+          r = await provider.publish(conn, token, { network, text, image, imageUrl: image ? image.url : '' });
+        }
         results[network] = { ok: true, id: String(r.id || ''), url: r.url || '', account: conn.account_name, at };
         db.prepare("UPDATE connections SET status = 'ok', last_error = '' WHERE id = ?").run(conn.id);
       } catch (e) {
@@ -369,7 +385,7 @@ function createChannels(ctx) {
     return { ...post, results, status: allOk ? 'sent' : 'failed', sentAt: allOk ? new Date().toISOString() : (post.sentAt || null) };
   }
 
-  return { providers, providerList, connectionsFor, startConnect, finishConnect, disconnect, setActive, publishPost, cipher };
+  return { providers, providerList, refresh, mode: zernio ? 'zernio' : 'direct', connectionsFor, startConnect, finishConnect, disconnect, setActive, publishPost, cipher };
 }
 
 module.exports = { createChannels, buildProviders, PublishError, NETWORK_PROVIDER };

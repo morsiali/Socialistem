@@ -12,12 +12,13 @@ function register(r, ctx) {
 
   r.get('/api/channels', async (req, res) => {
     const u = ctx.requireUser(req);
+    await ctx.channels.refresh(u, req.query.get('refresh') === '1');
     H.sendJson(res, 200, { providers: ctx.channels.providerList(), connections: ctx.channels.connectionsFor(u.id), practiceMode: !!ctx.settings().practiceMode });
   });
 
   r.del('/api/channels/:id', async (req, res, { id }) => {
     const u = ctx.requireUser(req);
-    if (!ctx.channels.disconnect(u, id)) throw new H.HttpError(404, 'not_found', 'No such connection.');
+    if (!(await ctx.channels.disconnect(u, id))) throw new H.HttpError(404, 'not_found', 'No such connection.');
     H.sendJson(res, 200, { connections: ctx.channels.connectionsFor(u.id) });
   });
 

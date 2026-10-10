@@ -128,7 +128,7 @@ function createApp(config, opts = {}) {
     if (!req.user) return H.redirect(res, '/login?next=/app');
     const [, step, provider] = m;
     if (step === 'connect') {
-      try { return H.redirect(res, ctx.channels.startConnect(req.user, provider)); }
+      try { return H.redirect(res, await ctx.channels.startConnect(req.user, provider)); }
       catch (e) { return back('channel_error', e.message); }
     }
     try {

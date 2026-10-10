@@ -90,6 +90,7 @@ function register(r, ctx) {
   r.get('/api/workspace', async (req, res) => {
     const u = ctx.requireUser(req);
     const s = ctx.settings();
+    await ctx.channels.refresh(u);
     const posts = db.prepare('SELECT data FROM posts WHERE user_id = ? ORDER BY created_at').all(u.id).map(r2 => JSON.parse(r2.data));
     const ideas = db.prepare('SELECT data FROM ideas WHERE user_id = ? ORDER BY created_at').all(u.id).map(r2 => JSON.parse(r2.data));
     H.sendJson(res, 200, {

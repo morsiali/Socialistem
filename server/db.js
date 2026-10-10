@@ -105,7 +105,9 @@ const MIGRATIONS = [
      bytes INTEGER NOT NULL,
      created_at TEXT NOT NULL
    );
-   CREATE INDEX media_user ON media(user_id);`
+   CREATE INDEX media_user ON media(user_id);`,
+  // 3: Zernio unified social API profile per member (encrypted)
+  `ALTER TABLE users ADD COLUMN social_profile TEXT;`
 ];
 
 const DEFAULT_SETTINGS = {

@@ -8,7 +8,7 @@ approvals, inbox, analytics, listening and an AI assistant, with member and admi
 cp .env.example .env          # add ANTHROPIC_API_KEY, ADMIN_EMAIL, ADMIN_PASSWORD
 node --env-file=.env server/index.js
 # open http://localhost:3000
-npm test                      # 53 tests: core logic, API, and channel publishing against mock networks
+npm test                      # 55 tests: core logic, API, and channel publishing against mock networks
 ```
 Node 22.13 or newer. No npm dependencies: the server uses Node's built-in HTTP and SQLite.
 

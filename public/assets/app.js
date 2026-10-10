@@ -22,6 +22,7 @@ const ICONS = {
   spark: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z',
   settings: 'M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1M15 5v4M9 10v4M17 15v4',
   plus: 'M12 5v14M5 12h14',
+  link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
   x: 'M6 6l12 12M18 6L6 18',
   image: 'M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M15.5 9.5h.01',
   edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
@@ -101,13 +102,20 @@ const DEFAULT_CONNECTED = SERVER
   : { instagram: true, facebook: true, linkedin: true, x: true, tiktok: true, threads: true, youtube: false, pinterest: false };
 const DEMO_HANDLES = { instagram: '@marsa.coffee', facebook: 'Marsa Coffee', linkedin: 'Marsa Coffee Roasters', x: '@marsacoffee', tiktok: '@marsa.coffee', threads: '@marsa.coffee', youtube: 'Marsa Coffee', pinterest: 'marsacoffee' };
 /* Real channels (socialistem.com): which provider connects which network. */
-const LIVE_NETS = ['linkedin', 'facebook', 'instagram', 'x', 'threads'];
+const DEFAULT_LIVE = ['linkedin', 'facebook', 'instagram', 'x', 'threads'];
+/** Networks this server can publish to (all eight when it runs through Zernio). */
+const liveNets = () => { const n = [].concat(...(S.ch.providers || []).map(p => p.networks || [])); return n.length ? n : DEFAULT_LIVE; };
 const NET_PROVIDER = { linkedin: 'linkedin', x: 'x', facebook: 'meta', instagram: 'meta', threads: 'threads' };
 const PROVIDER_INFO = {
   linkedin: 'Posts to your personal LinkedIn profile.',
   meta: 'Posts to the Facebook Pages you manage and their linked Instagram professional accounts. Instagram posts need an image.',
   x: 'Posts to your X account, with an image if you add one.',
-  threads: 'Posts to your Threads profile.'
+  threads: 'Posts to your Threads profile.',
+  instagram: 'Professional accounts · images and video',
+  facebook: 'Pages · text, images and video',
+  tiktok: 'Video content · needs a video to post',
+  youtube: 'Video uploads · title and description',
+  pinterest: 'Pins · images with a link'
 };
 const connFor = id => (S.ch.connections || []).find(c => c.network === id && c.active) || null;
 const netName = id => (C.getNetwork(id) || { name: id }).name;
@@ -259,7 +267,7 @@ const connectedNets = () => {
   return C.NETWORKS.map(n => n.id).filter(id => connFor(id));
 };
 /** Channels offered in the composer: on socialistem.com every network that can go live, connected or not. */
-const composeNets = () => (SERVER ? (S.ch.practiceMode ? C.NETWORKS.map(n => n.id) : LIVE_NETS.slice()) : connectedNets());
+const composeNets = () => (SERVER ? (S.ch.practiceMode ? C.NETWORKS.map(n => n.id) : liveNets()) : connectedNets());
 const defaultNets = () => { const c = connectedNets(); const pick = ['instagram', 'linkedin', 'x'].filter(n => c.includes(n)); return pick.length ? pick : c.slice(0, 1); };
 const visibleSamples = list => (S.ws.hideSamples ? [] : list.filter(p => !S.ws.hidden.includes(p.id)));
 const allPosts = () => [...S.posts, ...visibleSamples(S.samplePosts)];
@@ -1063,14 +1071,16 @@ function channelsCard() {
   const card = p => {
     const mine = ch.connections.filter(c => p.networks.includes(c.network));
     const stale = mine.some(c => c.status === 'reconnect');
-    const action = p.configured
-      ? `<a class="btn sm ${mine.length && !stale ? '' : 'primary'}" href="/auth/connect/${esc(p.id)}">${stale ? 'Reconnect' : mine.length ? 'Add or refresh' : 'Connect'}</a>`
-      : '<span class="badge">Not available yet</span>';
-    return `<div class="prov"><div class="prov-head"><span class="prov-icons">${p.networks.map(n => net(n, true)).join('')}</span><div class="grow"><b>${esc(p.name)}</b></div>${action}</div><p class="prov-desc">${esc(PROVIDER_INFO[p.id] || '')}</p>
-      ${mine.length ? `<div class="accts">${mine.map(acct).join('')}</div>` : `<p class="prov-empty">${p.configured ? 'Not connected. You sign in on the network\'s own page; Socialistem never sees your password.' : 'The site owner has not switched this network on yet.'}</p>`}</div>`;
+    const pill = stale ? '<span class="cstat warn">Reconnect</span>' : mine.length ? '<span class="cstat ok">Connected</span>' : `<span class="cstat">${p.configured ? 'Not connected' : 'Not available yet'}</span>`;
+    const btn = p.configured
+      ? `<a class="btn full ${mine.length && !stale ? '' : 'primary'}" href="/auth/connect/${esc(p.id)}">${ic('link', 'sm')}${stale ? 'Reconnect account' : mine.length ? 'Add another account' : 'Connect account'}</a>`
+      : '<button class="btn full" disabled>Not available yet</button>';
+    return `<div class="prov"><div class="prov-head"><span class="prov-icons">${p.networks.map(n => net(n, true)).join('')}</span>${pill}</div>
+      <h3 class="prov-name">${esc(p.name)}</h3><p class="prov-desc">${esc(PROVIDER_INFO[p.id] || '')}</p>
+      ${mine.length ? `<div class="accts">${mine.map(acct).join('')}</div>` : '<div class="grow"></div>'}${btn}</div>`;
   };
-  const soon = C.NETWORKS.filter(n => !LIVE_NETS.includes(n.id));
-  return `<article class="card span2"><div class="card-head"><div><h2>Channels</h2><p class="sub">Connect your accounts so posts go live from Socialistem. You can disconnect at any time.</p></div></div>
+  const soon = C.NETWORKS.filter(n => !liveNets().includes(n.id));
+  return `<article class="card span2"><div class="card-head"><div><p class="eyebrow">Your connected world</p><h2>Every channel. One place.</h2><p class="sub">Connect through secure authorization. Your social passwords stay with each platform.</p></div><button class="btn sm" data-act="ch-refresh">Refresh accounts</button></div>
     ${ch.practiceMode ? `<div class="banner" style="margin:0 0 12px">${ic('info')}<div class="grow"><b>Practice mode is on.</b> Posts to channels you have not connected are marked as published without going live.</div></div>` : ''}
     <div class="prov-grid">${provs.map(card).join('')}</div>
     <p class="sub" style="margin-top:12px">Coming later: ${soon.map(n => esc(n.name)).join(', ')}.</p></article>`;
@@ -1821,6 +1831,11 @@ const ACT = {
     S.confirm = null;
     try { S.ch.connections = (await api('DELETE', '/api/channels/' + encodeURIComponent(id))).connections; toast('Disconnected. You can connect again at any time.'); }
     catch (e) { toast((e && e.message) || 'Could not disconnect. Try again.'); }
+    render(true);
+  },
+  'ch-refresh': async () => {
+    try { const d = await api('GET', '/api/channels?refresh=1'); S.ch = { providers: d.providers, connections: d.connections, practiceMode: !!d.practiceMode }; toast('Accounts refreshed.'); }
+    catch (e) { toast((e && e.message) || 'Could not refresh accounts.'); }
     render(true);
   },
   'ch-active': async el => {
