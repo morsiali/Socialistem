@@ -578,3 +578,37 @@ td .who small{color:var(--muted);font-size:12.5px}
 .mini-table td,.mini-table th{padding:7px 8px;font-size:13px}
 @media (max-width:1100px){.admin-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:640px){.admin-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ---------- Real channels and publishing results ---------- */
+.badge.failed{background:var(--bad-soft);color:var(--bad)}
+.badge.publishing{background:var(--accent-soft);color:var(--accent)}
+.post.is-failed{border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}
+.cal-item.failed{border-color:var(--bad);color:var(--bad)}
+.presults{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600}
+.presults li{display:flex;gap:8px;align-items:center;min-width:0}
+.presults li span{min-width:0;overflow-wrap:anywhere}
+.presults li.ok{color:var(--good)} .presults li.bad{color:var(--bad)}
+.presults a{color:inherit;text-decoration:underline}
+.presults .net{min-width:22px;height:18px;font-size:10px;padding:0 4px;border-radius:5px;flex:none}
+.chip.off{border-style:dashed}
+.chip.off small{font-size:11px;font-weight:700;color:var(--muted);margin-left:2px}
+.cmp-hint{font-size:13px;font-weight:600;color:var(--warn);margin-top:6px}
+.cmp-hint a{color:inherit;font-weight:800}
+.connect-nudge{width:100%;max-width:820px;align-items:center}
+.prov-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.prov{border:1px solid var(--line);border-radius:var(--r-md);padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.prov-head{display:flex;gap:10px;align-items:center}
+.prov-desc{font-size:13px;color:var(--muted);line-height:1.45;margin-top:-4px}
+.prov-head .grow{flex:1;min-width:0}
+.prov-head b{display:block;font-size:15px}
+.prov-head small{display:block;color:var(--muted);font-size:12.5px;line-height:1.45}
+.prov-icons{display:flex;gap:4px;flex:none}
+.prov-empty{font-size:13px;color:var(--muted);font-weight:600}
+.accts{display:flex;flex-direction:column;gap:6px}
+.acct{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 10px;border-radius:var(--r-sm, 8px);background:var(--surface-2);min-width:0}
+.acct .grow{flex:1;min-width:120px}
+.acct .grow b{display:block;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct .grow small{display:block;color:var(--muted);font-size:12.5px}
+.acct .grow small.acct-warn{color:var(--bad);font-weight:700}
+@media (max-width:640px){.prov-grid{grid-template-columns:minmax(0,1fr)}}
+.settings .chan .grow small{white-space:normal}

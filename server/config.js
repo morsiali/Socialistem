@@ -23,6 +23,14 @@ function loadConfig(env = process.env) {
     modelBest: env.AI_MODEL_BEST || 'claude-sonnet-5-5',
     schedulerMs: env.SCHEDULER_MS ? Number(env.SCHEDULER_MS) : 30000,
     loginMaxAttempts: Number(env.LOGIN_MAX_ATTEMPTS) || 10,
+    // Social channels: each one switches on when its id and secret are set.
+    linkedinClientId: env.LINKEDIN_CLIENT_ID || '', linkedinClientSecret: env.LINKEDIN_CLIENT_SECRET || '',
+    xClientId: env.X_CLIENT_ID || '', xClientSecret: env.X_CLIENT_SECRET || '',
+    metaAppId: env.META_APP_ID || '', metaAppSecret: env.META_APP_SECRET || '',
+    threadsAppId: env.THREADS_APP_ID || '', threadsAppSecret: env.THREADS_APP_SECRET || '',
+    tokenKey: env.TOKEN_ENCRYPTION_KEY || '', // optional; otherwise a key file is created in DATA_DIR
+    providerUrls: null,                       // tests point the providers at a mock server
+    publishPollMs: env.PUBLISH_POLL_MS ? Number(env.PUBLISH_POLL_MS) : 3000,
     version: '1.0.0'
   };
 }

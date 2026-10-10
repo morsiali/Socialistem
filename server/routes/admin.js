@@ -34,7 +34,9 @@ function register(r, ctx) {
       posts: n('SELECT COUNT(*) n FROM posts WHERE user_id = ?', u.id),
       scheduled: n("SELECT COUNT(*) n FROM posts WHERE user_id = ? AND status = 'scheduled'", u.id),
       aiMonth: n('SELECT COUNT(*) n FROM ai_usage WHERE user_id = ? AND ok = 1 AND created_at >= ?', u.id, month),
-      sessions: n('SELECT COUNT(*) n FROM sessions WHERE user_id = ? AND expires_at > ?', u.id, new Date().toISOString())
+      sessions: n('SELECT COUNT(*) n FROM sessions WHERE user_id = ? AND expires_at > ?', u.id, new Date().toISOString()),
+      channels: n('SELECT COUNT(*) n FROM connections WHERE user_id = ?', u.id),
+      failed: n("SELECT COUNT(*) n FROM posts WHERE user_id = ? AND status = 'failed'", u.id)
     };
   }
 
@@ -60,6 +62,7 @@ function register(r, ctx) {
         total: n('SELECT COUNT(*) n FROM posts'), scheduled: n("SELECT COUNT(*) n FROM posts WHERE status = 'scheduled'"),
         sent: n("SELECT COUNT(*) n FROM posts WHERE status = 'sent'"), drafts: n("SELECT COUNT(*) n FROM posts WHERE status = 'draft'"),
         approval: n("SELECT COUNT(*) n FROM posts WHERE status = 'approval'"),
+        failed: n("SELECT COUNT(*) n FROM posts WHERE status = 'failed'"),
         next7: n("SELECT COUNT(*) n FROM posts WHERE status = 'scheduled' AND scheduled_at < ?", new Date(Date.now() + 7 * DAY).toISOString())
       },
       ai: {
@@ -70,6 +73,12 @@ function register(r, ctx) {
         byKind: db.prepare('SELECT kind, COUNT(*) n FROM ai_usage WHERE ok = 1 AND created_at >= ? GROUP BY kind ORDER BY n DESC').all(month).map(x => ({ kind: x.kind, n: Number(x.n) }))
       },
       series: { days, signups: days.map(d => signups[d] || 0), ai: days.map(d => ai[d] || 0) },
+      channels: {
+        providers: ctx.channels.providerList(),
+        practiceMode: !!ctx.settings().practiceMode,
+        byNetwork: Object.fromEntries(db.prepare('SELECT network, COUNT(*) n FROM connections GROUP BY network').all().map(x => [x.network, Number(x.n)])),
+        needReconnect: n("SELECT COUNT(*) n FROM connections WHERE status = 'reconnect'")
+      },
       recentUsers: db.prepare('SELECT * FROM users ORDER BY created_at DESC LIMIT 6').all().map(A.publicUser),
       system: {
         version: config.version, node: process.version, uptimeSec: Math.round((Date.now() - startedAt) / 1000),
@@ -101,11 +110,12 @@ function register(r, ctx) {
     const u = userRow(id);
     const posts = db.prepare('SELECT data FROM posts WHERE user_id = ? ORDER BY updated_at DESC LIMIT 10').all(id).map(x => {
       const p = JSON.parse(x.data);
-      return { id: p.id, status: p.status, networks: p.networks, scheduledAt: p.scheduledAt, text: String(Object.values(p.variants || {})[0] || '').slice(0, 160) };
+      const errors = Object.entries(p.results || {}).filter(([, r2]) => r2 && !r2.ok).map(([net, r2]) => `${net}: ${r2.error}`);
+      return { id: p.id, status: p.status, networks: p.networks, scheduledAt: p.scheduledAt, errors, text: String(Object.values(p.variants || {})[0] || '').slice(0, 160) };
     });
     const activity = db.prepare('SELECT action, detail, ip, created_at FROM activity WHERE target_id = ? OR actor_id = ? ORDER BY id DESC LIMIT 15').all(id, id);
     const ws = ctx.getWorkspace(u);
-    H.sendJson(res, 200, { user: adminUser(u), brand: ws.voice || {}, posts, activity });
+    H.sendJson(res, 200, { user: adminUser(u), brand: ws.voice || {}, posts, activity, connections: ctx.channels.connectionsFor(id).map(c => ({ network: c.network, name: c.name, handle: c.handle, status: c.status, active: c.active })) });
   });
 
   r.post('/api/admin/users', async (req, res) => {
@@ -191,6 +201,7 @@ function register(r, ctx) {
     const patch = {};
     if ('signupsOpen' in s) patch.signupsOpen = !!s.signupsOpen;
     if ('aiEnabled' in s) patch.aiEnabled = !!s.aiEnabled;
+    if ('practiceMode' in s) patch.practiceMode = !!s.practiceMode;
     if ('announcement' in s) patch.announcement = String(s.announcement || '').slice(0, 300);
     if (s.aiDailyLimits && typeof s.aiDailyLimits === 'object') {
       patch.aiDailyLimits = {};

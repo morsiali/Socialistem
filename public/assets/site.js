@@ -19,6 +19,15 @@ const getConfig = () => api('GET', '/api/public/config').catch(() => ({ signupsO
 /** Only allow same-site paths after login. */
 function safeNext(v) { return typeof v === 'string' && /^\/(?!\/)[A-Za-z0-9/_\-#?=&.]*$/.test(v) ? v : '/app'; }
 
+if (page === 'privacy') {
+  const year = $('#year'); if (year) year.textContent = new Date().getFullYear();
+  getConfig().then(cfg => {
+    if (!cfg.supportEmail) return;
+    $('#support-line').textContent = ' at ' + cfg.supportEmail;
+    $('#support-email').textContent = cfg.supportEmail;
+  });
+}
+
 if (page === 'landing') {
   const year = $('#year'); if (year) year.textContent = new Date().getFullYear();
   getConfig().then(cfg => {

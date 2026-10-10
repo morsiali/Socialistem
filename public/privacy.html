@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Privacy · Socialistem</title>
+<meta name="description" content="How Socialistem handles your account, your posts and your connected social accounts.">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap">
+<link rel="stylesheet" href="/assets/styles.css">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body class="site" data-page="privacy">
+<header class="site-nav">
+  <a class="brand" href="/"><img class="brand-mark" src="/assets/favicon.svg" alt=""><span class="brand-name">Socialistem</span></a>
+  <div class="site-auth"><a class="btn ghost" href="/login">Log in</a><a class="btn primary" href="/signup">Get started</a></div>
+</header>
+<main class="s-section legal">
+  <p class="eyebrow">Privacy</p>
+  <h1>Privacy and data deletion</h1>
+  <p class="sub">Last updated 10 October 2026</p>
+
+  <h2 id="what">What we store</h2>
+  <ul>
+    <li>Your account: name, email, brand name and a scrambled (hashed) version of your password.</li>
+    <li>Your workspace: posts, drafts, ideas, images you upload, your posting schedule and brand voice.</li>
+    <li>Connected social accounts: the account name and id, and the access token the network gives us so we can post for you. Tokens are encrypted on our server. We never see or store your social media passwords; you sign in on the network's own page.</li>
+    <li>Basic logs: sign-ins, publishing results and AI usage counts, used to run and secure the service.</li>
+  </ul>
+
+  <h2 id="use">How we use it</h2>
+  <ul>
+    <li>To publish the posts you create to the accounts you connect, at the times you choose.</li>
+    <li>To write and improve posts with AI when you ask. The text you send to the AI features is processed by our AI provider to produce the answer.</li>
+    <li>We do not sell your data and we do not post anything you did not create or schedule.</li>
+  </ul>
+
+  <h2 id="images">Images</h2>
+  <p>Images attached to a post are stored on our server at a long, unguessable address so that Instagram, Facebook and Threads can download them when the post goes out.</p>
+
+  <h2 id="delete">Deleting your data</h2>
+  <ul>
+    <li><b>Disconnect a social account:</b> open the app, go to <b>Settings → Channels</b> and choose <b>Disconnect</b>. Its tokens are deleted immediately. You can also remove Socialistem from the network's own settings (for example Facebook → Settings → Business integrations, or LinkedIn → Settings → Data privacy → Permitted services).</li>
+    <li><b>Delete your account:</b> open the app, go to <b>Account → Delete account</b>. Your account, posts, ideas, images and connected accounts are deleted.</li>
+    <li>If you cannot log in, email us<span id="support-line"></span> from the address on your account and we will delete it for you.</li>
+  </ul>
+
+  <h2 id="contact">Contact</h2>
+  <p>Questions about your data: <span id="support-email">use the contact address on the login page</span>.</p>
+</main>
+<footer class="site-foot">
+  <span>© <span id="year">2026</span> Socialistem</span>
+  <nav aria-label="Footer"><a href="/">Home</a><a href="/login">Log in</a><a href="/signup">Sign up</a></nav>
+</footer>
+<script src="/assets/site.js"></script>
+</body>
+</html>

@@ -100,8 +100,30 @@ const DEFAULT_CONNECTED = SERVER
   ? { instagram: true, facebook: true, linkedin: true, x: true, tiktok: false, threads: false, youtube: false, pinterest: false }
   : { instagram: true, facebook: true, linkedin: true, x: true, tiktok: true, threads: true, youtube: false, pinterest: false };
 const DEMO_HANDLES = { instagram: '@marsa.coffee', facebook: 'Marsa Coffee', linkedin: 'Marsa Coffee Roasters', x: '@marsacoffee', tiktok: '@marsa.coffee', threads: '@marsa.coffee', youtube: 'Marsa Coffee', pinterest: 'marsacoffee' };
+/* Real channels (socialistem.com): which provider connects which network. */
+const LIVE_NETS = ['linkedin', 'facebook', 'instagram', 'x', 'threads'];
+const NET_PROVIDER = { linkedin: 'linkedin', x: 'x', facebook: 'meta', instagram: 'meta', threads: 'threads' };
+const PROVIDER_INFO = {
+  linkedin: 'Posts to your personal LinkedIn profile.',
+  meta: 'Posts to the Facebook Pages you manage and their linked Instagram professional accounts. Instagram posts need an image.',
+  x: 'Posts to your X account, with an image if you add one.',
+  threads: 'Posts to your Threads profile.'
+};
+const connFor = id => (S.ch.connections || []).find(c => c.network === id && c.active) || null;
+const netName = id => (C.getNetwork(id) || { name: id }).name;
+/** Why these channels cannot publish yet ('' when they can). */
+function notReady(networks) {
+  if (!SERVER || S.ch.practiceMode) return '';
+  const missing = networks.filter(n => !connFor(n));
+  if (missing.length) return `Connect ${missing.map(netName).join(', ')} in Settings first.`;
+  const stale = networks.filter(n => connFor(n).status === 'reconnect');
+  if (stale.length) return `Reconnect ${stale.map(netName).join(', ')} in Settings first.`;
+  return '';
+}
 function handleFor(id) {
   if (!SERVER) return DEMO_HANDLES[id] || '';
+  const conn = connFor(id);
+  if (conn) return conn.handle || conn.name;
   const slug = String(S.ws.voice.brand || (S.me && S.me.name) || 'yourbrand').toLowerCase().replace(/[^a-z0-9]+/g, '') || 'yourbrand';
   return ['facebook', 'linkedin', 'youtube'].includes(id) ? (S.ws.voice.brand || 'Your brand') : '@' + slug;
 }
@@ -226,17 +248,25 @@ const S = {
   convId: 'c1', inboxFilter: 'open', inboxDetail: false, replies: {}, replyBusy: false, replyErr: '', draftReply: {},
   aiOut: {}, aiBusy: {}, ideaBusy: false, ideaErr: '', pillars: 'Sourcing, Education, Community, Menu',
   chat: [], chatBusy: false, chatCtl: null, chatErr: '',
-  cmp: null, menuOpen: false, dirty: false
+  cmp: null, menuOpen: false, dirty: false,
+  ch: { providers: [], connections: [], practiceMode: false }, busyPost: {}
 };
 S.samplePosts = buildSamplePosts();
 
-const connectedNets = () => C.NETWORKS.map(n => n.id).filter(id => S.ws.connected[id]);
+const connectedNets = () => {
+  if (!SERVER) return C.NETWORKS.map(n => n.id).filter(id => S.ws.connected[id]);
+  if (S.ch.practiceMode) return C.NETWORKS.map(n => n.id);
+  return C.NETWORKS.map(n => n.id).filter(id => connFor(id));
+};
+/** Channels offered in the composer: on socialistem.com every network that can go live, connected or not. */
+const composeNets = () => (SERVER ? (S.ch.practiceMode ? C.NETWORKS.map(n => n.id) : LIVE_NETS.slice()) : connectedNets());
 const defaultNets = () => { const c = connectedNets(); const pick = ['instagram', 'linkedin', 'x'].filter(n => c.includes(n)); return pick.length ? pick : c.slice(0, 1); };
 const visibleSamples = list => (S.ws.hideSamples ? [] : list.filter(p => !S.ws.hidden.includes(p.id)));
 const allPosts = () => [...S.posts, ...visibleSamples(S.samplePosts)];
 const allIdeas = () => [...S.ideas, ...visibleSamples(SAMPLE_IDEAS)];
 /** Scheduled posts whose time has passed count as published (the demo scheduler). */
-const effStatus = p => (p.status === 'scheduled' && p.scheduledAt && new Date(p.scheduledAt) <= new Date() ? 'sent' : p.status);
+const effStatus = p => (SERVER && !p.sample ? (S.busyPost[p.id] ? 'publishing' : p.status) : (p.status === 'scheduled' && p.scheduledAt && new Date(p.scheduledAt) <= new Date() ? 'sent' : p.status));
+const needsAttention = p => ['failed', 'publishing'].includes(effStatus(p));
 const byFilter = p => S.filter === 'all' || p.networks.includes(S.filter);
 function nextFree(excludeId) {
   const taken = allPosts().filter(p => p.id !== excludeId && ['scheduled', 'approval'].includes(effStatus(p)) && p.scheduledAt).map(p => p.scheduledAt);
@@ -297,8 +327,10 @@ const Store = {
       S.me = d.user; S.usage = d.usage; S.announcement = d.announcement || '';
       mergeWs(d.workspace);
       S.posts = d.posts || []; S.ideas = d.ideas || [];
+      S.ch = { providers: d.providers || [], connections: d.connections || [], practiceMode: !!d.practiceMode };
       S.samplePosts = buildSamplePosts();
       this.mode = 'server';
+      oauthReturn();
     } catch (e) {
       if (e && e.code === 'unauthorized') return;
       this.mode = 'memory';
@@ -307,6 +339,14 @@ const Store = {
     scheduleRender();
   },
   memory() { this.mode = 'memory'; scheduleRender(); },
+  async reloadServer() {
+    try {
+      const d = await api('GET', '/api/workspace');
+      S.posts = d.posts || [];
+      S.ch = { providers: d.providers || [], connections: d.connections || [], practiceMode: !!d.practiceMode };
+      render(true);
+    } catch (e) { /* keep what we have */ }
+  },
   fail(e) { console.warn('Store:', e && e.code, e && e.message); if (e && ['revoked', 'not_granted', 'capability_disabled', 'capability_removed', 'invalid_argument'].includes(e.code)) { this.mode = 'memory'; scheduleRender(); } },
   writeFail(e) {
     if (e && e.code === 'unauthorized') return;
@@ -368,6 +408,15 @@ function mergeWs(d) {
   if (Array.isArray(d.keywords)) w.keywords = d.keywords.map(String).slice(0, 12);
   w.requireApproval = !!d.requireApproval;
   w.hideSamples = !!d.hideSamples;
+}
+/** Coming back from a network's sign-in page: show the result once, then tidy the address bar. */
+function oauthReturn() {
+  const q = new URLSearchParams(location.search);
+  const ok = q.get('connected'), err = q.get('channel_error');
+  if (!ok && !err) return;
+  history.replaceState(null, '', '/app' + (location.hash || '#settings'));
+  if (ok) toast(`Connected ${ok.split(',').map(netName).join(' and ')}. You can publish there now.`, 6000);
+  else toast(err, 9000);
 }
 function hideSample(id) { if (!S.ws.hidden.includes(id)) { S.ws.hidden.push(id); Store.saveWs(); } }
 
@@ -567,7 +616,7 @@ function setRoute(r) {
 
 function renderRail() {
   const counts = {
-    queue: allPosts().filter(p => effStatus(p) === 'scheduled').length,
+    queue: allPosts().filter(p => effStatus(p) === 'scheduled' || needsAttention(p)).length,
     approvals: allPosts().filter(p => p.status === 'approval').length,
     inbox: S.inbox.filter(c => c.status === 'open').length
   };
@@ -596,7 +645,7 @@ function renderRail() {
 function banner() {
   const ann = SERVER && S.announcement ? `<div class="banner announce">${ic('info')}<div class="grow"><b>Announcement:</b> ${esc(S.announcement)}</div></div>` : '';
   if (lsGet('socialistem.banner') === 'off') return ann;
-  if (SERVER) return ann + `<div class="banner">${ic('info')}<div class="grow"><b>Preview modules.</b> Inbox, analytics and listening show sample data until channel integrations are switched on. Your posts, ideas and settings are saved to your account.</div><button class="iconbtn" data-act="banner-off" aria-label="Dismiss notice">${ic('x', 'sm')}</button></div>`;
+  if (SERVER) return ann + `<div class="banner">${ic('info')}<div class="grow"><b>Preview modules.</b> Inbox, analytics and listening show sample data for now. Publishing to the channels you connect in Settings is live.</div><button class="iconbtn" data-act="banner-off" aria-label="Dismiss notice">${ic('x', 'sm')}</button></div>`;
   const saved = Store.mode === 'db' ? 'saved to your private workspace' : 'kept for this session only';
   return `<div class="banner">${ic('info')}<div class="grow"><b>Demo workspace for “Marsa Coffee”.</b> Channel connections, inbox, analytics and listening use sample data. Posts, ideas and settings you create are ${saved}. AI writing runs live.</div><button class="iconbtn" data-act="banner-off" aria-label="Dismiss notice">${ic('x', 'sm')}</button></div>`;
 }
@@ -627,7 +676,7 @@ VIEWS.home = () => {
       <label class="sr" for="hero-idea">What do you want to post?</label>
       <textarea id="hero-idea" rows="3" placeholder="e.g. Announce our new date-syrup cold brew for the weekend. Playful, mention it's dairy-free.">${esc(S.heroIdea || '')}</textarea>
       <div class="prompt-bar">
-        <div class="chips" role="group" aria-label="Channels">${connectedNets().map(id => `<button type="button" class="chip" data-act="hero-net" data-net="${id}" aria-pressed="${sel.includes(id)}">${net(id)}${esc(C.getNetwork(id).name)}</button>`).join('')}</div>
+        <div class="chips" role="group" aria-label="Channels">${composeNets().map(id => { const off = SERVER && !S.ch.practiceMode && !connFor(id); return `<button type="button" class="chip${off ? ' off' : ''}" data-act="hero-net" data-net="${id}" aria-pressed="${sel.includes(id)}">${net(id)}${esc(C.getNetwork(id).name)}</button>`; }).join('')}</div>
         <div class="prompt-actions">
           <label class="sr" for="hero-lang">Language</label>
           <select id="hero-lang"><option value="en">English</option><option value="ar"${S.heroLang === 'ar' ? ' selected' : ''}>العربية</option><option value="both"${S.heroLang === 'both' ? ' selected' : ''}>Bilingual</option></select>
@@ -635,6 +684,7 @@ VIEWS.home = () => {
         </div>
       </div>
     </form>
+    ${SERVER && Store.mode === 'server' && !S.ch.practiceMode && !S.ch.connections.length ? `<div class="banner connect-nudge">${ic('info')}<div class="grow"><b>Connect your channels to publish.</b> Link LinkedIn, Facebook, Instagram, X or Threads once, and Socialistem posts for you at the times you choose.</div><a class="btn sm primary" href="#settings" data-act="go" data-to="settings">Connect channels</a></div>` : ''}
     <div class="suggest"><span class="lbl">Try</span>${suggestions.map(s => `<button type="button" class="chip plain" data-act="hero-suggest" data-text="${esc(s)}">${esc(s)}</button>`).join('')}</div>
     <ol class="flow" aria-label="How Socialistem works">
       <li><b>Idea</b><span>Type it, pick a trend, or pull from your Ideas board</span></li>
@@ -691,7 +741,7 @@ const sentBadge = s => `<span class="badge ${s === 'positive' ? 'pos' : s === 'n
 VIEWS.queue = () => {
   const list = allPosts();
   const cnt = st => list.filter(p => effStatus(p) === st && byFilter(p)).length;
-  const tabs = [['queue', 'Queue', cnt('scheduled')], ['drafts', 'Drafts', cnt('draft')], ['approvals', 'Approvals', cnt('approval')], ['sent', 'Sent', cnt('sent')]];
+  const tabs = [['queue', 'Queue', cnt('scheduled') + list.filter(p => needsAttention(p) && byFilter(p)).length], ['drafts', 'Drafts', cnt('draft')], ['approvals', 'Approvals', cnt('approval')], ['sent', 'Sent', cnt('sent')]];
   const titles = { queue: ['Queue', 'Posts go out at your schedule times. Empty slots show where there is room for more.'], drafts: ['Drafts', 'Work in progress. Nothing here is scheduled yet.'], approvals: ['Approvals', 'Posts your team wants to publish. Approve them to put them in the queue.'], sent: ['Sent', 'Published posts and how they performed.'] };
   const t = titles[S.queueTab];
   let body;
@@ -721,8 +771,10 @@ function queueList(list) {
   ].sort((a, b) => a.t - b.t);
   const days = C.groupByDay(rows.map(r => ({ ...r, at: r.t.toISOString() })), 'at');
   const later = scheduled.filter(p => new Date(p.scheduledAt) >= horizon).sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt));
-  if (!days.length && !later.length) return `<div class="empty"><h3>Your queue is empty</h3><p>Add posting times in Settings, then create a post.</p><button class="btn primary" data-act="compose">${ic('plus')}Create post</button></div>`;
-  return days.map(g => {
+  const attention = list.filter(p => needsAttention(p) && byFilter(p)).sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+  const top = attention.length ? `<section class="qday"><h3>Needs attention<small>${plural(attention.length, 'post')} did not go out</small></h3><div class="qitems">${attention.map(p => postCard(p, { showDate: true })).join('')}</div></section>` : '';
+  if (!days.length && !later.length) return top + `<div class="empty"><h3>Your queue is empty</h3><p>Add posting times in Settings, then create a post.</p><button class="btn primary" data-act="compose">${ic('plus')}Create post</button></div>`;
+  return top + days.map(g => {
     const n = g.items.filter(x => !x.slot).length;
     return `<section class="qday"><h3>${esc(C.dayLabel(g.date, now))}<small>${g.key === C.dayKey(now) ? `${C.DAY_NAMES[now.getDay()]} ${fmtDate(now)} · ` : ''}${plural(n, 'post')}</small></h3><div class="qitems">${g.items.map(x => x.slot ? slotRow(x.t) : postCard(x.p)).join('')}</div></section>`;
   }).join('') + (later.length ? `<section class="qday"><h3>Later</h3><div class="qitems">${later.map(p => postCard(p, { showDate: true })).join('')}</div></section>` : '');
@@ -748,20 +800,27 @@ function postCard(p, o = {}) {
     p.sample ? '<span class="badge sample">Sample</span>' : '',
     st === 'approval' ? `<span class="badge approval">Awaiting approval · ${esc(p.author || 'Team')}</span>` : '',
     st === 'sent' ? '<span class="badge sent">Published</span>' : '',
+    st === 'failed' ? '<span class="badge failed">Not published</span>' : '',
+    st === 'publishing' ? '<span class="badge publishing">Publishing…</span>' : '',
     p.aiWritten ? '<span class="badge ai">AI</span>' : ''
   ].join('');
-  const stats = st === 'sent' ? (p.stats ? `<div class="pmeta"><span><b>${C.fmtCompact(p.stats.reach)}</b> reach</span><span><b>${C.engagementRate(p.stats.interactions, p.stats.reach)}%</b> engagement</span><span><b>${C.fmtCompact(p.stats.clicks)}</b> clicks</span></div>` : '<div class="pmeta">Metrics arrive after the first sync with the channel.</div>') : '';
+  const stats = st === 'sent' ? (p.stats ? `<div class="pmeta"><span><b>${C.fmtCompact(p.stats.reach)}</b> reach</span><span><b>${C.engagementRate(p.stats.interactions, p.stats.reach)}%</b> engagement</span><span><b>${C.fmtCompact(p.stats.clicks)}</b> clicks</span></div>` : (SERVER && !p.sample ? '' : '<div class="pmeta">Metrics arrive after the first sync with the channel.</div>')) : '';
+  const res = p.results && typeof p.results === 'object' ? Object.entries(p.results).filter(([n]) => p.networks.includes(n)) : [];
+  const resultsHtml = res.length && st !== 'publishing' ? `<ul class="presults">${res.map(([n, r]) => `<li class="${r.ok ? 'ok' : 'bad'}">${net(n)}<span>${r.ok
+    ? (r.simulated ? 'Practice mode: not posted for real' : `Live${r.account ? ' on ' + esc(r.account) : ''}${r.url ? ` · <a href="${esc(r.url)}" target="_blank" rel="noopener">View post</a>` : ''}`)
+    : esc(r.error || 'Failed')}${!r.ok && (r.code === 'reconnect' || r.code === 'not_connected') ? ` · <a href="#settings" data-act="go" data-to="settings">Open Settings</a>` : ''}</span></li>`).join('')}</ul>` : '';
   const acts = [];
+  if (st === 'failed') acts.push(`<button class="btn sm primary" data-act="share-now" data-id="${p.id}">${ic('send', 'sm')}Retry</button>`);
   if (st === 'approval') acts.push(`<button class="btn sm primary" data-act="approve" data-id="${p.id}">${ic('done', 'sm')}Approve</button>`, `<button class="btn sm" data-act="changes" data-id="${p.id}">Request changes</button>`);
-  if (st !== 'sent') acts.push(`<button class="btn ghost sm" data-act="edit" data-id="${p.id}">${ic('edit', 'sm')}Edit</button>`);
+  if (st !== 'sent' && st !== 'publishing') acts.push(`<button class="btn ghost sm" data-act="edit" data-id="${p.id}">${ic('edit', 'sm')}Edit</button>`);
   if (st === 'draft') acts.push(`<button class="btn ghost sm" data-act="to-queue" data-id="${p.id}">${ic('queue', 'sm')}Add to queue</button>`);
-  if (st === 'scheduled') acts.push(`<button class="btn ghost sm" data-act="share-now" data-id="${p.id}">${ic('send', 'sm')}Share now</button>`);
+  if (st === 'scheduled' || (SERVER && st === 'draft' && !p.sample)) acts.push(`<button class="btn ghost sm" data-act="share-now" data-id="${p.id}">${ic('send', 'sm')}${st === 'draft' ? 'Publish now' : 'Share now'}</button>`);
   acts.push(`<button class="btn ghost sm" data-act="dup" data-id="${p.id}">${ic('copy', 'sm')}Duplicate</button>`);
-  acts.push(`<button class="btn ghost sm danger${armed ? ' armed' : ''}" data-act="del" data-id="${p.id}">${ic('trash', 'sm')}${armed ? 'Click again to delete' : 'Delete'}</button>`);
-  return `<article class="post${st === 'approval' ? ' is-approval' : ''}${st === 'sent' ? ' is-sent' : ''}">${timeCol}
+  if (st !== 'publishing') acts.push(`<button class="btn ghost sm danger${armed ? ' armed' : ''}" data-act="del" data-id="${p.id}">${ic('trash', 'sm')}${armed ? 'Click again to delete' : 'Delete'}</button>`);
+  return `<article class="post${st === 'approval' ? ' is-approval' : ''}${st === 'sent' ? ' is-sent' : ''}${st === 'failed' ? ' is-failed' : ''}">${timeCol}
     <div class="pbody"><div class="ptop">${nets(p.networks)}${badges}</div>
       <div style="display:flex;gap:12px;align-items:flex-start"><p class="ptext" dir="auto" style="flex:1">${esc(firstText(p))}</p>${mediaHtml(p)}</div>
-      ${stats}<div class="pactions">${acts.join('')}</div></div></article>`;
+      ${resultsHtml}${stats}<div class="pactions">${acts.join('')}</div></div></article>`;
 }
 
 VIEWS.approvals = VIEWS.queue;
@@ -967,8 +1026,8 @@ VIEWS.settings = () => {
   return `
   <header class="vh"><div><h1>Settings</h1><p class="sub">Channels, posting schedule, brand voice and team rules. Changes save automatically.</p></div></header>
   <div class="settings">
-    <article class="card span2"><div class="card-head"><div><h2>Channels</h2><p class="sub">Channel connections are simulated for now. When integrations go live, each switch runs the network's sign-in flow.</p></div></div>
-      <div class="chan-grid">${C.NETWORKS.map(n => `<div class="chan">${net(n.id, true)}<div class="grow"><b>${esc(n.name)}</b><small>${S.ws.connected[n.id] ? esc(handleFor(n.id)) : 'Not connected'}</small></div><button class="switch" role="switch" aria-checked="${!!S.ws.connected[n.id]}" aria-label="Connect ${esc(n.name)}" data-act="connect" data-net="${n.id}"></button></div>`).join('')}</div></article>
+    ${SERVER ? channelsCard() : `<article class="card span2"><div class="card-head"><div><h2>Channels</h2><p class="sub">Channel connections are simulated in this preview. On socialistem.com each one signs in to the network.</p></div></div>
+      <div class="chan-grid">${C.NETWORKS.map(n => `<div class="chan">${net(n.id, true)}<div class="grow"><b>${esc(n.name)}</b><small>${S.ws.connected[n.id] ? esc(handleFor(n.id)) : 'Not connected'}</small></div><button class="switch" role="switch" aria-checked="${!!S.ws.connected[n.id]}" aria-label="Connect ${esc(n.name)}" data-act="connect" data-net="${n.id}"></button></div>`).join('')}</div></article>`}
     <article class="card"><div class="card-head"><div><h2>Posting schedule</h2><p class="sub">Queue times per day, Dubai time. "Add to queue" uses the next free one.</p></div></div>
       <div class="sched">${order.map(d => `<div class="sched-row"><b>${C.DAY_NAMES[d]}</b><div class="times">${S.ws.schedule[d].map(t => `<span class="time">${t}<button data-act="time-del" data-d="${d}" data-t="${t}" aria-label="Remove ${t} on ${C.DAY_NAMES[d]}">${ic('x', 'sm')}</button></span>`).join('')}<span class="time-add"><label class="sr" for="t-${d}">Add time on ${C.DAY_NAMES[d]}</label><input type="time" id="t-${d}" data-change="time-add" data-d="${d}"></span></div></div>`).join('')}</div></article>
     <article class="card"><div class="card-head"><div><h2>Brand voice</h2><p class="sub">The AI engine writes, rewrites and replies with this profile.</p></div><span class="badge ai">AI</span></div>
@@ -989,6 +1048,33 @@ VIEWS.settings = () => {
       <p class="sub" style="margin-top:12px">${Store.saved ? 'Your posts, ideas and settings are saved to a private workspace that only you can see.' : 'Storage is not available in this view, so changes last until you reload.'}</p></article>
   </div>`;
 };
+
+function channelsCard() {
+  const ch = S.ch;
+  const provs = ch.providers.length ? ch.providers : [{ id: 'linkedin', name: 'LinkedIn', networks: ['linkedin'] }, { id: 'meta', name: 'Facebook & Instagram', networks: ['facebook', 'instagram'] }, { id: 'x', name: 'X', networks: ['x'] }, { id: 'threads', name: 'Threads', networks: ['threads'] }];
+  const acct = c => {
+    const armed = S.confirm === 'ch:' + c.id;
+    const several = ch.connections.filter(x => x.network === c.network).length > 1;
+    return `<div class="acct">${net(c.network)}<div class="grow"><b>${esc(c.name)}</b><small>${esc(netName(c.network))}${c.handle && c.handle !== c.name ? ' · ' + esc(c.handle) : ''}</small>
+      ${c.status === 'reconnect' ? `<small class="acct-warn">${esc(c.lastError || 'The connection expired.')} Reconnect to keep posting.</small>` : ''}</div>
+      ${several ? (c.active ? '<span class="badge sent">Posts go here</span>' : `<button class="btn ghost sm" data-act="ch-active" data-id="${esc(c.id)}">Post here</button>`) : ''}
+      <button class="btn ghost sm danger${armed ? ' armed' : ''}" data-act="ch-del" data-id="${esc(c.id)}">${armed ? 'Click again to disconnect' : 'Disconnect'}</button></div>`;
+  };
+  const card = p => {
+    const mine = ch.connections.filter(c => p.networks.includes(c.network));
+    const stale = mine.some(c => c.status === 'reconnect');
+    const action = p.configured
+      ? `<a class="btn sm ${mine.length && !stale ? '' : 'primary'}" href="/auth/connect/${esc(p.id)}">${stale ? 'Reconnect' : mine.length ? 'Add or refresh' : 'Connect'}</a>`
+      : '<span class="badge">Not available yet</span>';
+    return `<div class="prov"><div class="prov-head"><span class="prov-icons">${p.networks.map(n => net(n, true)).join('')}</span><div class="grow"><b>${esc(p.name)}</b></div>${action}</div><p class="prov-desc">${esc(PROVIDER_INFO[p.id] || '')}</p>
+      ${mine.length ? `<div class="accts">${mine.map(acct).join('')}</div>` : `<p class="prov-empty">${p.configured ? 'Not connected. You sign in on the network\'s own page; Socialistem never sees your password.' : 'The site owner has not switched this network on yet.'}</p>`}</div>`;
+  };
+  const soon = C.NETWORKS.filter(n => !LIVE_NETS.includes(n.id));
+  return `<article class="card span2"><div class="card-head"><div><h2>Channels</h2><p class="sub">Connect your accounts so posts go live from Socialistem. You can disconnect at any time.</p></div></div>
+    ${ch.practiceMode ? `<div class="banner" style="margin:0 0 12px">${ic('info')}<div class="grow"><b>Practice mode is on.</b> Posts to channels you have not connected are marked as published without going live.</div></div>` : ''}
+    <div class="prov-grid">${provs.map(card).join('')}</div>
+    <p class="sub" style="margin-top:12px">Coming later: ${soon.map(n => esc(n.name)).join(', ')}.</p></article>`;
+}
 
 /* ---------------- Account (socialistem.com only) ---------------- */
 VIEWS.account = () => {
@@ -1140,7 +1226,7 @@ new ResizeObserver(() => { clearTimeout(roTimer); roTimer = setTimeout(mountChar
 /* ================================================================== */
 function openComposer(o = {}) {
   const base = o.post || null;
-  const conn = connectedNets();
+  const conn = composeNets();
   const at = o.at ? new Date(o.at) : (base && base.scheduledAt && ['scheduled', 'approval'].includes(effStatus(base)) ? new Date(base.scheduledAt) : null);
   S.cmp = {
     editingId: base && !o.dup ? base.id : null, editingSample: !!(base && base.sample && !o.dup), origStatus: base && !o.dup ? base.status : null,
@@ -1164,7 +1250,7 @@ function openComposer(o = {}) {
 }
 function closeComposer(force) {
   const c = S.cmp;
-  if (!c) return;
+  if (!c || c.saving) return;
   if (!force && c.dirty && !c.confirmClose) { c.confirmClose = true; renderComposer(); return; }
   if (c.ctl) c.ctl.abort();
   S.cmp = null;
@@ -1200,7 +1286,7 @@ function previewHtml(id) {
 function renderComposer() {
   const c = S.cmp;
   if (!c) return;
-  const conn = connectedNets();
+  const conn = composeNets();
   const id = c.active;
   const busy = c.busy;
   const tabHtml = c.networks.map(n => { const st = tabState(n); return `<button class="vtab${st === 'pending' ? ' pending' : ''}" role="tab" aria-selected="${n === id}" data-act="cmp-tab" data-net="${n}">${net(n)}${esc(C.getNetwork(n).name)}<span class="dot ${st === 'pending' ? '' : st}"></span></button>`; }).join('');
@@ -1217,7 +1303,8 @@ function renderComposer() {
     <div class="cmp-body">
       <section class="cmp-brief" aria-label="Brief">
         <div class="field"><label class="lbl" for="cmp-idea">Idea or brief</label><textarea class="input" id="cmp-idea" data-cmp-in="idea" rows="4" dir="auto" placeholder="What is the post about? Add details: offer, dates, tone, audience…">${esc(c.idea)}</textarea></div>
-        <div class="field"><span class="lbl">Channels</span><div class="chips" role="group" aria-label="Channels">${conn.map(n => `<button type="button" class="chip" data-act="cmp-net" data-net="${n}" aria-pressed="${c.networks.includes(n)}">${net(n)}${esc(C.getNetwork(n).name)}</button>`).join('')}</div></div>
+        <div class="field"><span class="lbl">Channels</span><div class="chips" role="group" aria-label="Channels">${conn.map(n => { const off = SERVER && !S.ch.practiceMode && !connFor(n); return `<button type="button" class="chip${off ? ' off' : ''}" data-act="cmp-net" data-net="${n}" aria-pressed="${c.networks.includes(n)}"${off ? ' title="Not connected yet"' : ''}>${net(n)}${esc(C.getNetwork(n).name)}${off ? '<small>not connected</small>' : ''}</button>`; }).join('')}</div>
+          ${SERVER && notReady(c.networks) ? `<p class="cmp-hint">${esc(notReady(c.networks))} You can still write and save a draft. <a href="#settings" data-act="cmp-settings">Open Settings</a></p>` : ''}</div>
         <div class="cmp-opts">
           ${sel('format', 'Format', [['post', 'Single post'], ['thread', 'Thread'], ['carousel', 'Carousel copy'], ['video', 'Video script']], c.format)}
           ${sel('tone', 'Tone', [['voice', 'Brand voice'], ['friendly', 'Friendly'], ['professional', 'Professional'], ['playful', 'Playful'], ['bold', 'Bold'], ['inspiring', 'Inspiring']], c.tone)}
@@ -1226,6 +1313,7 @@ function renderComposer() {
         </div>
         <div class="cmp-toggles">${[['hashtags', 'Hashtags'], ['cta', 'Call to action'], ['emoji', 'Emoji']].map(([k, l]) => `<label class="check"><input type="checkbox" data-cmp-chk="${k}"${c[k] ? ' checked' : ''}>${l}</label>`).join('')}</div>
         <div class="field"><span class="lbl">Media</span><div class="cmp-media">${c.media.map((m, i) => `<div class="m">${m.thumb ? `<img class="thumb" src="${esc(m.thumb)}" alt="${esc(m.name || 'Attached image')}">` : `<div class="thumb sw-${esc(m.swatch)}" role="img" aria-label="Sample photo"></div>`}<button data-act="cmp-media-del" data-i="${i}" aria-label="Remove image">${ic('x', 'sm')}</button></div>`).join('')}
+          ${SERVER && c.media.length > 1 ? '<p class="cmp-hint" style="flex-basis:100%">The first image is published; the others stay with the draft.</p>' : ''}
           ${c.media.length < 4 ? `<label class="upload">${ic('image')}Add image<input type="file" accept="image/*" multiple data-cmp-file></label>` : ''}</div>
           ${hasImgForAI && AI.images ? `<label class="check"><input type="checkbox" data-cmp-chk="useImage"${c.useImage ? ' checked' : ''}>Let AI read the image and write alt text</label>` : ''}</div>
         <div class="field"><label class="lbl" for="cmp-tier">AI model</label><select class="input" id="cmp-tier" data-cmp="tier"><option value="quick"${c.tier === 'quick' ? ' selected' : ''}>Fast: drafts in seconds</option><option value="default"${c.tier === 'default' ? ' selected' : ''}>Best: more considered, slower</option></select></div>
@@ -1250,7 +1338,7 @@ function renderComposer() {
       <div class="when" role="group" aria-label="When to publish"><span class="lbl">When</span>
         <div class="seg"><button data-act="cmp-when" data-w="queue" aria-pressed="${c.when === 'queue'}">Next slot · ${esc(fmtWhen(nextSlot))}</button><button data-act="cmp-when" data-w="custom" aria-pressed="${c.when === 'custom'}">Pick a time</button><button data-act="cmp-when" data-w="now" aria-pressed="${c.when === 'now'}">Now</button></div>
         ${c.when === 'custom' ? `<label class="sr" for="cmp-at">Date and time</label><input type="datetime-local" id="cmp-at" data-cmp="customAt" value="${esc(c.customAt)}">` : ''}</div>
-      <div class="foot-actions"><button class="btn" data-act="cmp-save" data-mode="draft">Save draft</button>${req ? '' : `<button class="btn" data-act="cmp-save" data-mode="approval">Send for approval</button>`}<button class="btn primary" data-act="cmp-save" data-mode="${req ? 'approval' : 'schedule'}">${esc(primaryLabel)}</button></div>
+      <div class="foot-actions">${c.saving ? `<span class="ai-note">${thinking(c.saving)}</span>` : ''}<button class="btn" data-act="cmp-save" data-mode="draft"${c.saving ? ' disabled' : ''}>Save draft</button>${req ? '' : `<button class="btn" data-act="cmp-save" data-mode="approval"${c.saving ? ' disabled' : ''}>Send for approval</button>`}<button class="btn primary" data-act="cmp-save" data-mode="${req ? 'approval' : 'schedule'}"${c.saving ? ' disabled' : ''}>${esc(primaryLabel)}</button></div>
       ${c.saveError ? `<p class="save-err" role="alert">${esc(c.saveError)}</p>` : ''}
     </footer>
   </div>`;
@@ -1367,7 +1455,116 @@ async function cmpFiles(files) {
   }
   if (S.cmp === c) renderComposer();
 }
+/* ---------- Saving and publishing on socialistem.com ---------- */
+function loadImage(src) { return new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = () => rej(new Error('unreadable')); img.src = src; }); }
+/** A JPEG for the networks: up to 2048 px, white behind transparency, cropped to 4:5…1.91:1 when Instagram is a target. */
+async function publishJpeg(m, forInstagram) {
+  const url = m.file ? URL.createObjectURL(m.file) : m.thumb;
+  try {
+    const img = await loadImage(url);
+    let sw = img.naturalWidth, sh = img.naturalHeight, sx = 0, sy = 0;
+    if (forInstagram) {
+      const r = sw / sh;
+      if (r < 0.8) { const nh = Math.round(sw / 0.8); sy = Math.round((sh - nh) / 2); sh = nh; }
+      else if (r > 1.91) { const nw = Math.round(sh * 1.91); sx = Math.round((sw - nw) / 2); sw = nw; }
+    }
+    const k = Math.min(1, 2048 / Math.max(sw, sh));
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(sw * k)); cv.height = Math.max(1, Math.round(sh * k));
+    const g = cv.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+    g.drawImage(img, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+    let q = 0.9, out = cv.toDataURL('image/jpeg', q);
+    while (out.length > 10e6 && q > 0.5) { q -= 0.1; out = cv.toDataURL('image/jpeg', q); }
+    return out;
+  } finally { if (m.file) URL.revokeObjectURL(url); }
+}
+function publishSummary(p) {
+  const r = p.results || {};
+  const ok = p.networks.filter(n => r[n] && r[n].ok), bad = p.networks.filter(n => r[n] && !r[n].ok);
+  if (!bad.length) return `Published on ${ok.map(netName).join(', ')}.${ok.some(n => r[n].simulated) ? ' Practice mode: unconnected channels were not posted for real.' : ''}`;
+  return `${ok.length ? `Published on ${ok.map(netName).join(', ')}. ` : ''}Not published on ${netName(bad[0])}: ${r[bad[0]].error}${bad.length > 1 ? ` (and ${bad.length - 1} more; see the post in your queue)` : ''}`;
+}
+function replacePost(p) { S.posts = [...S.posts.filter(x => x.id !== p.id), p]; }
+async function publishNow(id) {
+  const p = findPost(id);
+  if (!p) return;
+  if (p.sample) return toast('This is a sample post. Duplicate it to publish your own version.');
+  const why = notReady(p.networks);
+  if (why) { toast(why, 6000); return; }
+  S.busyPost[id] = true; render(true);
+  try {
+    const d = await api('POST', `/api/posts/${encodeURIComponent(id)}/publish`);
+    replacePost(d.post);
+    toast(publishSummary(d.post), d.post.status === 'sent' ? 5000 : 9000);
+  } catch (e) {
+    if (e && e.code !== 'unauthorized') { toast((e && e.message) || 'Publishing failed. Try again.', 7000); Store.reloadServer(); }
+  } finally { delete S.busyPost[id]; render(true); }
+}
+async function cmpSaveServer(mode) {
+  const c = S.cmp;
+  if (c.saving) return;
+  c.saveError = '';
+  if (!c.networks.length) { c.saveError = 'Pick at least one channel.'; return renderComposer(); }
+  const nowD = new Date();
+  if (mode !== 'draft') {
+    const bad = c.networks.map(n => ({ n, i: variantIssues(n).find(x => x.level === 'error') })).filter(x => x.i);
+    if (bad.length) { c.active = bad[0].n; c.saveError = `Fix before publishing: ${bad.map(b => b.i.message).join(' ')}`; return renderComposer(); }
+    const why = notReady(c.networks);
+    if (why) { c.saveError = why + ' Or save it as a draft.'; return renderComposer(); }
+  }
+  const now = mode === 'schedule' && c.when === 'now';
+  let when = null;
+  if (mode !== 'draft' && !now) {
+    if (c.when === 'custom') {
+      when = new Date(c.customAt);
+      if (isNaN(when)) { c.saveError = 'Pick a date and time.'; return renderComposer(); }
+      if (when <= nowD) { c.saveError = 'That time has passed. Pick a time in the future.'; return renderComposer(); }
+    } else when = nextFree(c.editingId);
+  }
+  const status = mode === 'draft' || now ? 'draft' : mode === 'approval' ? 'approval' : 'scheduled';
+  const first = c.media[0];
+  const needIg = c.networks.includes('instagram');
+  c.saving = first && first.thumb && (!first.mediaId || (needIg && !first.mediaIg)) ? 'Uploading image…' : 'Saving…';
+  renderComposer();
+  try {
+    if (c.saving === 'Uploading image…') {
+      const up = await api('POST', '/api/media', { dataUrl: await publishJpeg(first, needIg) });
+      first.mediaId = up.id; first.mediaIg = needIg;
+    }
+    const post = {
+      id: c.editingId && !c.editingSample ? c.editingId : uid('p'),
+      networks: c.networks.slice(),
+      variants: Object.fromEntries(c.networks.map(n => [n, c.variants[n] || ''])),
+      idea: c.idea, format: c.format, altText: c.altText,
+      media: c.media.map(m => (m.thumb ? { thumb: m.thumb, name: m.name || '', ...(m.mediaId ? { mediaId: m.mediaId } : {}) } : { swatch: m.swatch })),
+      status, scheduledAt: when ? when.toISOString() : null,
+      createdAt: c.createdAt || nowD.toISOString(), author: 'You', aiWritten: !!c.aiWritten, sample: false
+    };
+    const saved = (await api('PUT', '/api/posts/' + encodeURIComponent(post.id), { post })).post;
+    if (c.editingSample) hideSample(c.editingId);
+    replacePost(saved);
+    c.dirty = false;
+    if (now) {
+      c.saving = 'Publishing…'; renderComposer();
+      const d = await api('POST', `/api/posts/${encodeURIComponent(saved.id)}/publish`);
+      replacePost(d.post);
+      c.saving = null; closeComposer(true);
+      return toast(publishSummary(d.post), d.post.status === 'sent' ? 5000 : 9000);
+    }
+    const chanNames = c.networks.map(netName).join(', ');
+    c.saving = null; closeComposer(true);
+    toast(status === 'draft' ? 'Saved to Drafts.' : status === 'approval' ? 'Sent for approval.' : `Scheduled for ${fmtWhen(when)} on ${chanNames}. It will go live automatically.`);
+  } catch (e) {
+    c.saving = null;
+    if (e && e.code === 'unauthorized') return;
+    if (S.cmp === c) { c.saveError = (e && e.message) || 'Saving failed. Try again.'; renderComposer(); }
+    else toast((e && e.message) || 'Publishing failed. Check the post in your queue.', 8000);
+    Store.reloadServer();
+  }
+}
 function cmpSave(mode) {
+  if (SERVER) return cmpSaveServer(mode);
   const c = S.cmp;
   c.saveError = '';
   if (!c.networks.length) { c.saveError = 'Pick at least one channel.'; return renderComposer(); }
@@ -1504,10 +1701,10 @@ function scrollChat() { const l = $('#chat-log'); if (l) l.scrollTop = l.scrollH
 /* Events                                                              */
 /* ================================================================== */
 let toastTimer;
-function toast(msg) {
+function toast(msg, ms = 4200) {
   const t = $('#toast');
   t.textContent = msg; t.hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 4200);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, ms);
 }
 const findPost = id => allPosts().find(p => p.id === id);
 function updatePost(p, patch) {
@@ -1542,15 +1739,16 @@ const ACT = {
     if (p && p.sample) hideSample(id); else Store.delPost(id);
     render(true); toast('Post deleted.');
   },
-  'share-now': el => { const p = findPost(el.dataset.id); if (!p) return; const n = new Date().toISOString(); updatePost(p, { status: 'sent', sentAt: n, scheduledAt: n }); render(true); toast('Marked as published. Live publishing needs real channel connections.'); },
+  'share-now': el => { if (SERVER) return publishNow(el.dataset.id); const p = findPost(el.dataset.id); if (!p) return; const n = new Date().toISOString(); updatePost(p, { status: 'sent', sentAt: n, scheduledAt: n }); render(true); toast('Marked as published. Live publishing needs real channel connections.'); },
   'to-queue': el => {
     const p = findPost(el.dataset.id); if (!p) return;
     const bad = p.networks.map(n => C.validatePost({ network: n, text: p.variants[n], mediaCount: (p.media || []).length }).find(i => i.level === 'error')).filter(Boolean);
     if (bad.length) { toast(`Fix this draft first: ${bad[0].message}`); return openComposer({ post: p }); }
+    if (!p.sample && notReady(p.networks)) return toast(notReady(p.networks), 6000);
     const at = nextFree(p.id); updatePost(p, { status: S.ws.requireApproval ? 'approval' : 'scheduled', scheduledAt: at.toISOString() }); render(true);
     toast(S.ws.requireApproval ? 'Sent for approval.' : `Scheduled for ${fmtWhen(at)}.`);
   },
-  approve: el => { const p = findPost(el.dataset.id); if (!p) return; let at = p.scheduledAt ? new Date(p.scheduledAt) : null; if (!at || at <= new Date()) at = nextFree(p.id); updatePost(p, { status: 'scheduled', scheduledAt: at.toISOString() }); render(true); toast(`Approved and scheduled for ${fmtWhen(at)}.`); },
+  approve: el => { const p = findPost(el.dataset.id); if (!p) return; if (!p.sample && notReady(p.networks)) return toast(notReady(p.networks), 6000); let at = p.scheduledAt ? new Date(p.scheduledAt) : null; if (!at || at <= new Date()) at = nextFree(p.id); updatePost(p, { status: 'scheduled', scheduledAt: at.toISOString() }); render(true); toast(`Approved and scheduled for ${fmtWhen(at)}.`); },
   changes: el => { const p = findPost(el.dataset.id); if (!p) return; updatePost(p, { status: 'draft' }); render(true); toast('Moved back to Drafts for changes.'); },
   cal: el => { const d = +el.dataset.d; if (!d) { const n = new Date(); S.cal = { y: n.getFullYear(), m: n.getMonth() }; } else { const n = new Date(S.cal.y, S.cal.m + d, 1); S.cal = { y: n.getFullYear(), m: n.getMonth() }; } render(true); },
   'cal-add': el => {
@@ -1614,7 +1812,22 @@ const ACT = {
   'cmp-copyall': () => { const c = S.cmp, t = c.variants[c.active]; c.networks.forEach(n => { c.variants[n] = t; }); c.dirty = true; renderComposer(); toast('Copied to every selected channel. Check the limits on each tab.'); },
   'cmp-media-del': el => { S.cmp.media.splice(+el.dataset.i, 1); S.cmp.dirty = true; renderComposer(); },
   'cmp-when': el => { S.cmp.when = el.dataset.w; S.cmp.saveError = ''; renderComposer(); },
-  'cmp-save': el => cmpSave(el.dataset.mode)
+  'cmp-save': el => cmpSave(el.dataset.mode),
+  'cmp-settings': () => { closeComposer(); if (!S.cmp) location.hash = 'settings'; },
+  /* real channels */
+  'ch-del': async el => {
+    const id = el.dataset.id;
+    if (S.confirm !== 'ch:' + id) { S.confirm = 'ch:' + id; return render(true); }
+    S.confirm = null;
+    try { S.ch.connections = (await api('DELETE', '/api/channels/' + encodeURIComponent(id))).connections; toast('Disconnected. You can connect again at any time.'); }
+    catch (e) { toast((e && e.message) || 'Could not disconnect. Try again.'); }
+    render(true);
+  },
+  'ch-active': async el => {
+    try { S.ch.connections = (await api('POST', `/api/channels/${encodeURIComponent(el.dataset.id)}/active`)).connections; toast('New posts go to this account.'); }
+    catch (e) { toast((e && e.message) || 'Could not switch accounts. Try again.'); }
+    render(true);
+  }
 };
 
 document.addEventListener('click', e => {

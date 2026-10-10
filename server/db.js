@@ -69,14 +69,52 @@ const MIGRATIONS = [
      created_at TEXT NOT NULL
    );
    CREATE INDEX activity_time ON activity(created_at);
-   CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);`
+   CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);`,
+  // 2: real social channel connections, OAuth handshakes and uploaded media
+  `CREATE TABLE connections (
+     id TEXT PRIMARY KEY,
+     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     network TEXT NOT NULL,
+     account_id TEXT NOT NULL,
+     account_name TEXT NOT NULL DEFAULT '',
+     account_handle TEXT NOT NULL DEFAULT '',
+     token_enc TEXT NOT NULL DEFAULT '',
+     refresh_enc TEXT NOT NULL DEFAULT '',
+     expires_at TEXT,
+     meta TEXT NOT NULL DEFAULT '{}',
+     active INTEGER NOT NULL DEFAULT 1,
+     status TEXT NOT NULL DEFAULT 'ok',
+     last_error TEXT NOT NULL DEFAULT '',
+     created_at TEXT NOT NULL,
+     updated_at TEXT NOT NULL,
+     UNIQUE (user_id, network, account_id)
+   );
+   CREATE INDEX connections_user ON connections(user_id, network);
+   CREATE TABLE oauth_states (
+     state TEXT PRIMARY KEY,
+     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     provider TEXT NOT NULL,
+     verifier TEXT NOT NULL DEFAULT '',
+     created_at TEXT NOT NULL
+   );
+   CREATE TABLE media (
+     id TEXT PRIMARY KEY,
+     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     mime TEXT NOT NULL,
+     data BLOB NOT NULL,
+     bytes INTEGER NOT NULL,
+     created_at TEXT NOT NULL
+   );
+   CREATE INDEX media_user ON media(user_id);`
 ];
 
 const DEFAULT_SETTINGS = {
   signupsOpen: true,
   aiEnabled: true,
   aiDailyLimits: { free: 40, pro: 300, business: 1500 },
-  announcement: ''
+  announcement: '',
+  // When on, networks with no connected account are marked as published without posting (for demos).
+  practiceMode: false
 };
 
 function openDb(file) {

@@ -42,7 +42,8 @@ const ACTIONS = {
   'user.deleted_self': 'Deleted own account', 'admin.user_created': 'Created a member', 'admin.user_updated': 'Updated a member',
   'admin.password_reset': 'Reset a password', 'admin.signed_out_user': 'Signed a member out', 'admin.user_deleted': 'Deleted a member',
   'admin.settings_updated': 'Changed platform settings', 'admin.created_by_config': 'Admin created from server settings',
-  'admin.promoted_by_config': 'Promoted to admin from server settings', 'post.scheduled': 'Scheduled a post', 'post.approval': 'Sent a post for approval', 'post.sent': 'Published a post'
+  'admin.promoted_by_config': 'Promoted to admin from server settings', 'post.scheduled': 'Scheduled a post', 'post.approval': 'Sent a post for approval', 'post.sent': 'Published a post',
+  'post.published': 'Published a post', 'post.publish_failed': 'A post failed to publish', 'channel.connected': 'Connected a channel', 'channel.disconnected': 'Disconnected a channel'
 };
 
 /* ---------------- render ---------------- */
@@ -72,7 +73,7 @@ VIEWS.overview = () => {
     ${tile('Members', C.fmtInt(o.users.total), `+${o.users.new7} this week · +${o.users.new30} in 30 days`)}
     ${tile('Active this week', C.fmtInt(o.users.active7), `${o.users.total ? Math.round(o.users.active7 / o.users.total * 100) : 0}% of members`)}
     ${tile('Scheduled posts', C.fmtInt(o.posts.scheduled), `${o.posts.next7} in the next 7 days`)}
-    ${tile('Published posts', C.fmtInt(o.posts.sent), `${o.posts.drafts} drafts · ${o.posts.approval} awaiting approval`)}
+    ${tile('Published posts', C.fmtInt(o.posts.sent), `${o.posts.failed || 0} failed · ${o.posts.drafts} drafts · ${o.posts.approval} awaiting approval`)}
     ${tile('AI requests today', C.fmtInt(o.ai.today), `${C.fmtInt(o.ai.month)} this month`)}
     ${tile('AI tokens this month', C.fmtCompact(o.ai.tokensMonth), `${o.ai.failedMonth} failed requests`)}
   </div>
@@ -90,8 +91,20 @@ VIEWS.overview = () => {
         <div class="bars">${o.ai.byKind.map(k => `<div class="bar-row" data-tip="${esc(k.kind)}: ${k.n} requests"><span class="name" style="text-transform:capitalize">${esc(k.kind)}</span><div class="bar-track"><div class="bar-fill" style="width:${(k.n / kindMax * 100).toFixed(1)}%"></div></div><span class="val">${C.fmtInt(k.n)}</span></div>`).join('') || '<p class="sub">No AI requests yet this month.</p>'}</div></article>
     </div>
   </div>
-  ${systemCard(o.system)}`;
+  <div class="grid-2e">${channelsCard(o.channels)}${systemCard(o.system)}</div>`;
 };
+const NET_NAMES = { linkedin: 'LinkedIn', facebook: 'Facebook', instagram: 'Instagram', x: 'X', threads: 'Threads' };
+const ENV_NAMES = { linkedin: 'LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET', x: 'X_CLIENT_ID / X_CLIENT_SECRET', meta: 'META_APP_ID / META_APP_SECRET', threads: 'THREADS_APP_ID / THREADS_APP_SECRET' };
+function channelsCard(ch) {
+  if (!ch) return '';
+  const row = (k, v) => `<div class="status-row"><span>${esc(k)}</span><b>${v}</b></div>`;
+  const off = ch.providers.filter(p => !p.configured);
+  return `<article class="card"><div class="card-head"><div><h2>Social channels</h2><p class="sub">Which networks members can connect, and how many have</p></div></div><div class="status-list">
+    ${ch.providers.map(p => row(p.name, p.configured ? `<span class="pill active">Ready</span> ${p.networks.map(n => `${esc(NET_NAMES[n] || n)}: ${C.fmtInt(ch.byNetwork[n] || 0)}`).join(' · ')}` : '<span class="pill suspended">Keys missing</span>')).join('')}
+    ${row('Need reconnecting', C.fmtInt(ch.needReconnect || 0))}
+    ${row('Practice mode', ch.practiceMode ? '<span class="pill">On</span>' : 'Off')}</div>
+    ${off.length ? `<p class="sub" style="margin-top:10px">To switch a network on, add its keys to the server's environment variables: ${off.map(p => `<code>${esc(ENV_NAMES[p.id])}</code>`).join(', ')}.</p>` : ''}</article>`;
+}
 function systemCard(sys) {
   const row = (k, v) => `<div class="status-row"><span>${esc(k)}</span><b>${v}</b></div>`;
   return `<article class="card"><div class="card-head"><div><h2>System</h2><p class="sub">Server and AI configuration</p></div></div><div class="status-list">
@@ -109,11 +122,11 @@ VIEWS.users = () => {
     <div class="seg" role="group" aria-label="Filter">${[['all', 'All'], ['members', 'Members'], ['admins', 'Admins'], ['suspended', 'Suspended']].map(([id, l]) => `<button data-act="ufilter" data-f="${id}" aria-pressed="${u.filter === id}">${l}</button>`).join('')}</div></div>
     <span class="sub">${C.fmtInt(u.total)} ${u.total === 1 ? 'member' : 'members'}</span></div>
   <article class="card" style="padding:6px 8px"><div class="tbl-wrap"><table>
-    <thead><tr><th>Member</th><th>Role</th><th>Plan</th><th>Status</th><th class="num">Posts</th><th class="num">AI this month</th><th>Last login</th><th>Joined</th><th></th></tr></thead>
+    <thead><tr><th>Member</th><th>Role</th><th>Plan</th><th>Status</th><th class="num">Posts</th><th class="num">Channels</th><th class="num">AI this month</th><th>Last login</th><th>Joined</th><th></th></tr></thead>
     <tbody>${u.list.map(x => `<tr><td><span class="who"><b>${esc(x.name)}</b><small>${esc(x.email)}${x.brand ? ' · ' + esc(x.brand) : ''}</small></span></td>
       <td><span class="pill ${x.role === 'admin' ? 'admin' : ''}">${esc(x.role)}</span></td><td style="text-transform:capitalize">${esc(x.plan)}</td>
-      <td><span class="pill ${x.status}">${esc(x.status)}</span></td><td class="num">${C.fmtInt(x.posts)}</td><td class="num">${C.fmtInt(x.aiMonth)}</td>
-      <td>${esc(ago(x.lastLoginAt))}</td><td>${esc(fmtDate(x.createdAt))}</td><td><button class="btn sm" data-act="open-user" data-id="${esc(x.id)}">Manage</button></td></tr>`).join('') || '<tr><td colspan="9" class="sub">No members match.</td></tr>'}</tbody></table></div></article>`;
+      <td><span class="pill ${x.status}">${esc(x.status)}</span></td><td class="num">${C.fmtInt(x.posts)}${x.failed ? ` <span class="pill suspended" title="Posts that failed to publish">${x.failed} failed</span>` : ''}</td><td class="num">${C.fmtInt(x.channels || 0)}</td><td class="num">${C.fmtInt(x.aiMonth)}</td>
+      <td>${esc(ago(x.lastLoginAt))}</td><td>${esc(fmtDate(x.createdAt))}</td><td><button class="btn sm" data-act="open-user" data-id="${esc(x.id)}">Manage</button></td></tr>`).join('') || '<tr><td colspan="10" class="sub">No members match.</td></tr>'}</tbody></table></div></article>`;
 };
 
 VIEWS.activity = () => {
@@ -136,6 +149,7 @@ VIEWS.settings = () => {
       <div style="display:flex;flex-direction:column;gap:10px">
         ${sw('signupsOpen', s.signupsOpen, 'Open sign-ups', 'Anyone can create an account at /signup')}
         ${sw('aiEnabled', s.aiEnabled, 'AI features', 'Writing, rewriting, replies, ideas, briefs and the assistant')}
+        ${sw('practiceMode', s.practiceMode, 'Practice mode', 'Posts to channels a member has not connected are marked as published without going live. Use it for demos; keep it off for real use.')}
       </div></article>
     <article class="card"><div class="card-head"><div><h2>Daily AI limits</h2><p class="sub">Requests per member per day, by plan. Admins have no limit.</p></div></div>
       <div class="form-grid">${['free', 'pro', 'business'].map(p => `<div class="field"><label class="lbl" for="lim-${p}" style="text-transform:capitalize">${p}</label><input class="input" id="lim-${p}" type="number" min="0" max="100000" step="1" value="${Number(s.aiDailyLimits[p]) || 0}"></div>`).join('')}</div></article>
@@ -168,14 +182,14 @@ function renderDrawer() {
     const sel = (k, opts) => `<div class="field"><label class="lbl" for="du-${k}">${k[0].toUpperCase() + k.slice(1)}</label><select class="input" id="du-${k}" data-patch="${k}"${self && k !== 'plan' ? ' disabled' : ''}>${opts.map(o => `<option value="${o}"${u[k] === o ? ' selected' : ''}>${o[0].toUpperCase() + o.slice(1)}</option>`).join('')}</select></div>`;
     const row = (k, v) => `<div class="status-row"><span>${esc(k)}</span><b>${esc(v)}</b></div>`;
     body = `
-      <div class="status-list">${row('Email', u.email)}${row('Brand', d.data.brand.brand || '—')}${row('Joined', fmtDate(u.createdAt))}${row('Last login', ago(u.lastLoginAt))}${row('Signed-in devices', u.sessions)}${row('Posts', `${u.posts} (${u.scheduled} scheduled)`)}${row('AI requests this month', u.aiMonth)}</div>
+      <div class="status-list">${row('Email', u.email)}${row('Brand', d.data.brand.brand || '—')}${row('Joined', fmtDate(u.createdAt))}${row('Last login', ago(u.lastLoginAt))}${row('Signed-in devices', u.sessions)}${row('Posts', `${u.posts} (${u.scheduled} scheduled)`)}${row('AI requests this month', u.aiMonth)}${row('Connected channels', (d.data.connections || []).map(c => `${NET_NAMES[c.network] || c.network}: ${c.name}${c.status === 'reconnect' ? ' (needs reconnecting)' : ''}`).join(', ') || 'None')}</div>
       <div class="form-grid">${sel('role', ['member', 'admin'])}${sel('plan', ['free', 'pro', 'business'])}${sel('status', ['active', 'suspended'])}</div>
       ${self ? '<p class="sub">You cannot change your own role or suspend yourself.</p>' : ''}
       ${d.err ? `<p class="ai-note err">${esc(d.err)}</p>` : ''}
       ${d.tempPassword ? secretBlock('New temporary password. Share it privately; their other sessions were signed out.', d.tempPassword) : ''}
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="reset-pw">Reset password</button><button class="btn" data-act="signout-user">Sign out everywhere</button>
       ${self ? '' : `<button class="btn danger${S.confirm === 'deluser' ? ' armed' : ''}" data-act="delete-user">${S.confirm === 'deluser' ? 'Click again to delete' : 'Delete member'}</button>`}</div>
-      <div><h3 style="font-size:15px;margin-bottom:6px">Recent posts</h3>${d.data.posts.length ? `<div class="tbl-wrap"><table class="mini-table"><tbody>${d.data.posts.map(p => `<tr><td><span class="pill">${esc(p.status)}</span></td><td><span class="clip">${esc(p.text)}</span></td><td class="sub" style="white-space:nowrap">${esc((p.networks || []).join(', '))}</td></tr>`).join('')}</tbody></table></div>` : '<p class="sub">No posts yet.</p>'}</div>
+      <div><h3 style="font-size:15px;margin-bottom:6px">Recent posts</h3>${d.data.posts.length ? `<div class="tbl-wrap"><table class="mini-table"><tbody>${d.data.posts.map(p => `<tr><td><span class="pill${p.status === 'failed' ? ' suspended' : ''}">${esc(p.status)}</span></td><td><span class="clip" title="${esc((p.errors || []).join(' | '))}">${esc(p.text)}</span>${p.errors && p.errors.length ? `<small class="sub" style="display:block;color:var(--bad)">${esc(p.errors[0])}</small>` : ''}</td><td class="sub" style="white-space:nowrap">${esc((p.networks || []).join(', '))}</td></tr>`).join('')}</tbody></table></div>` : '<p class="sub">No posts yet.</p>'}</div>
       <div><h3 style="font-size:15px;margin-bottom:6px">Recent activity</h3>${d.data.activity.length ? `<div class="tbl-wrap"><table class="mini-table"><tbody>${d.data.activity.map(a => `<tr><td style="white-space:nowrap">${esc(ago(a.created_at))}</td><td>${esc(ACTIONS[a.action] || a.action)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="sub">Nothing yet.</p>'}</div>`;
   }
   const title = d.kind === 'add' ? 'Add a member' : (d.data ? d.data.user.name : 'Member');
@@ -314,7 +328,7 @@ document.addEventListener('submit', async e => {
   if (f.dataset.form === 'settings') {
     const s = S.settings;
     try {
-      const r = await api('PUT', '/api/admin/settings', { settings: { signupsOpen: s.signupsOpen, aiEnabled: s.aiEnabled, announcement: $('#announce').value.trim(), aiDailyLimits: { free: +$('#lim-free').value, pro: +$('#lim-pro').value, business: +$('#lim-business').value } } });
+      const r = await api('PUT', '/api/admin/settings', { settings: { signupsOpen: s.signupsOpen, aiEnabled: s.aiEnabled, practiceMode: !!s.practiceMode, announcement: $('#announce').value.trim(), aiDailyLimits: { free: +$('#lim-free').value, pro: +$('#lim-pro').value, business: +$('#lim-business').value } } });
       S.settings = r.settings; S.saveMsg = 'Settings saved. They apply to every member now.';
     } catch (x) { S.err = x.message || 'Could not save settings.'; }
     render();

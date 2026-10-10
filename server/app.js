@@ -5,6 +5,7 @@ const { openDb, getSettings, logActivity } = require('./db');
 const H = require('./http');
 const A = require('./auth');
 const { runScheduler } = require('./scheduler');
+const { createChannels } = require('./channels');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -66,7 +67,10 @@ function createApp(config, opts = {}) {
     }
   };
 
+  ctx.channels = createChannels(ctx);
+
   require('./routes/auth').register(router, ctx);
+  require('./routes/channels').register(router, ctx);
   require('./routes/workspace').register(router, ctx);
   require('./routes/ai').register(router, ctx);
   require('./routes/admin').register(router, ctx);
@@ -94,6 +98,8 @@ function createApp(config, opts = {}) {
       }
 
       if (req.method !== 'GET' && req.method !== 'HEAD') throw new H.HttpError(405, 'method_not_allowed', 'Method not allowed.');
+      if (pathname.startsWith('/auth/')) return await oauthPage(req, res, pathname, url);
+      if (pathname.startsWith('/media/')) return serveMedia(res, pathname);
       return servePage(req, res, pathname, url);
     } catch (e) {
       if (res.headersSent) { try { res.end(); } catch (x) { /* already closed */ } return; }
@@ -114,9 +120,43 @@ function createApp(config, opts = {}) {
     }
   }
 
+  // OAuth: /auth/connect/<provider> sends the member to the network; /auth/callback/<provider> brings them back.
+  async function oauthPage(req, res, pathname, url) {
+    const m = /^\/auth\/(connect|callback)\/([a-z]+)\/?$/.exec(pathname);
+    if (!m) return servePage(req, res, pathname, url);
+    const back = (key, value) => H.redirect(res, `/app?${key}=${encodeURIComponent(value)}#settings`);
+    if (!req.user) return H.redirect(res, '/login?next=/app');
+    const [, step, provider] = m;
+    if (step === 'connect') {
+      try { return H.redirect(res, ctx.channels.startConnect(req.user, provider)); }
+      catch (e) { return back('channel_error', e.message); }
+    }
+    try {
+      const nets = await ctx.channels.finishConnect(req.user, provider, {
+        code: url.searchParams.get('code'), state: url.searchParams.get('state'),
+        error: url.searchParams.get('error') || url.searchParams.get('error_reason')
+      });
+      return back('connected', [...new Set(nets)].join(','));
+    } catch (e) {
+      if (!e.code) console.error('OAuth callback error', provider, e);
+      return back('channel_error', e.code ? e.message : 'The connection did not complete. Try again.');
+    }
+  }
+
+  // Uploaded post images, public so the networks can fetch them. Ids are long random strings.
+  function serveMedia(res, pathname) {
+    const m = /^\/media\/(m_[A-Za-z0-9_-]{8,40})\.(?:jpg|jpeg|png)$/.exec(pathname);
+    const row = m && db.prepare('SELECT mime, data FROM media WHERE id = ?').get(m[1]);
+    if (!row) { res.writeHead(404, { 'content-type': 'text/plain' }); return res.end('Not found'); }
+    const data = Buffer.from(row.data);
+    res.writeHead(200, { 'content-type': row.mime, 'content-length': data.length, 'cache-control': 'public, max-age=31536000, immutable' });
+    res.end(data);
+  }
+
   function servePage(req, res, pathname, url) {
     const page = f => H.serveFile(res, PUBLIC_DIR, '/' + f, { cache: 'no-store' });
     if (pathname === '/' || pathname === '/index.html') return page('index.html');
+    if (pathname === '/privacy' || pathname === '/data-deletion') return page('privacy.html');
     if (pathname === '/login' || pathname === '/signup') return req.user ? H.redirect(res, req.user.role === 'admin' && url.searchParams.get('next') === '/admin' ? '/admin' : '/app') : page('auth.html');
     if (pathname === '/app' || pathname.startsWith('/app/')) return req.user ? page('app.html') : H.redirect(res, '/login?next=/app');
     if (pathname === '/admin' || pathname.startsWith('/admin/')) {
@@ -131,7 +171,7 @@ function createApp(config, opts = {}) {
 
   let timer = null;
   if (config.schedulerMs > 0 && !opts.noScheduler) {
-    timer = setInterval(() => { try { runScheduler(db); } catch (e) { console.error('Scheduler error', e); } }, config.schedulerMs);
+    timer = setInterval(() => { runScheduler(ctx).catch(e => console.error('Scheduler error', e)); }, config.schedulerMs);
     timer.unref();
   }
 

@@ -350,18 +350,20 @@ test('AI errors map to clear codes', async () => {
   } finally { await t.close(); }
 });
 
-test('the scheduler publishes due posts only', async () => {
+test('the scheduler fails clearly when no account is connected', async () => {
   const t = await startApp();
   try {
     const m = await member(t);
     const past = new Date(Date.now() - 60000).toISOString(), future = new Date(Date.now() + 3600000).toISOString();
     await m.call('PUT', '/api/posts/p_due', { post: { networks: ['x'], variants: { x: 'a' }, status: 'scheduled', scheduledAt: past } });
     await m.call('PUT', '/api/posts/p_later', { post: { networks: ['x'], variants: { x: 'b' }, status: 'scheduled', scheduledAt: future } });
-    assert.equal(runScheduler(t.app.db), 1);
+    assert.equal(await runScheduler(t.app.ctx), 1);
     const posts = (await m.call('GET', '/api/workspace')).data.posts;
-    assert.equal(posts.find(p => p.id === 'p_due').status, 'sent');
+    const due = posts.find(p => p.id === 'p_due');
+    assert.equal(due.status, 'failed');
+    assert.equal(due.results.x.code, 'not_connected');
     assert.equal(posts.find(p => p.id === 'p_later').status, 'scheduled');
-    assert.equal(runScheduler(t.app.db), 0);
+    assert.equal(await runScheduler(t.app.ctx), 0);
   } finally { await t.close(); }
 });
 
@@ -371,6 +373,7 @@ test('pages, static files and path traversal', async () => {
     const c = t.client();
     assert.equal((await c.call('GET', '/')).status, 200);
     assert.equal((await c.call('GET', '/login')).status, 200);
+    assert.equal((await c.call('GET', '/privacy')).status, 200);
     assert.equal((await c.call('GET', '/assets/core.js')).status, 200);
     assert.equal((await c.call('GET', '/assets/..%2f..%2fserver%2fconfig.js')).status, 404);
     assert.equal((await c.call('GET', '/assets/../package.json')).status, 404);

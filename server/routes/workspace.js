@@ -4,7 +4,8 @@ const A = require('../auth');
 const { usageFor } = require('./auth');
 
 const ID_RE = /^[A-Za-z0-9_-]{3,64}$/;
-const STATUSES = ['draft', 'approval', 'scheduled', 'sent'];
+const STATUSES = ['draft', 'approval', 'scheduled'];      // statuses a member may set
+const SERVER_STATUSES = ['publishing', 'sent', 'failed'];  // set only by the publisher
 const MAX_POSTS = 3000, MAX_IDEAS = 1000;
 
 const str = (v, max) => String(v == null ? '' : v).slice(0, max);
@@ -38,7 +39,8 @@ function cleanPost(C, id, p) {
   const variants = {};
   for (const n of networks) variants[n] = str(p.variants && p.variants[n], 63206);
   const media = (Array.isArray(p.media) ? p.media : []).slice(0, 4).map(m => {
-    if (m && typeof m.thumb === 'string' && /^data:image\/(jpeg|png|webp|gif);base64,/.test(m.thumb) && m.thumb.length < 400000) return { thumb: m.thumb, name: str(m.name, 120) };
+    const mediaId = m && typeof m.mediaId === 'string' && /^m_[A-Za-z0-9_-]{8,40}$/.test(m.mediaId) ? m.mediaId : undefined;
+    if (m && typeof m.thumb === 'string' && /^data:image\/(jpeg|png|webp|gif);base64,/.test(m.thumb) && m.thumb.length < 400000) return { thumb: m.thumb, name: str(m.name, 120), ...(mediaId ? { mediaId } : {}) };
     if (m && typeof m.swatch === 'string') return { swatch: str(m.swatch, 20).replace(/[^a-z]/g, '') };
     return null;
   }).filter(Boolean);
@@ -60,6 +62,19 @@ function cleanIdea(id, i) {
   };
 }
 
+/** Keep what only the publisher may change (status once published, per-network results). */
+function mergeServerFields(post, existing) {
+  if (!existing) return post;
+  if (existing.results) post.results = existing.results;
+  if (existing.publishedBy) post.publishedBy = existing.publishedBy;
+  if (existing.status === 'sent' || existing.status === 'publishing') {
+    post.status = existing.status;
+    post.sentAt = existing.sentAt || post.sentAt;
+    post.scheduledAt = existing.scheduledAt || post.scheduledAt;
+  }
+  return post;
+}
+
 function savePostRow(db, userId, post) {
   const now = new Date().toISOString();
   post.updatedAt = now;
@@ -77,7 +92,10 @@ function register(r, ctx) {
     const s = ctx.settings();
     const posts = db.prepare('SELECT data FROM posts WHERE user_id = ? ORDER BY created_at').all(u.id).map(r2 => JSON.parse(r2.data));
     const ideas = db.prepare('SELECT data FROM ideas WHERE user_id = ? ORDER BY created_at').all(u.id).map(r2 => JSON.parse(r2.data));
-    H.sendJson(res, 200, { user: A.publicUser(u), workspace: ctx.getWorkspace(u), posts, ideas, announcement: s.announcement || '', usage: usageFor(ctx, u) });
+    H.sendJson(res, 200, {
+      user: A.publicUser(u), workspace: ctx.getWorkspace(u), posts, ideas, announcement: s.announcement || '', usage: usageFor(ctx, u),
+      providers: ctx.channels.providerList(), connections: ctx.channels.connectionsFor(u.id), practiceMode: !!s.practiceMode
+    });
   });
 
   r.put('/api/workspace', async (req, res) => {
@@ -92,16 +110,24 @@ function register(r, ctx) {
     const u = ctx.requireUser(req);
     if (!ID_RE.test(id)) throw new H.HttpError(400, 'bad_id', 'Invalid post id.');
     const b = await H.readJson(req, 2 * 1024 * 1024);
-    const owner = db.prepare('SELECT user_id FROM posts WHERE id = ?').get(id);
+    const owner = db.prepare('SELECT user_id, data FROM posts WHERE id = ?').get(id);
     if (owner && owner.user_id !== u.id) throw new H.HttpError(404, 'not_found', 'No such post.');
     if (!owner && db.prepare('SELECT COUNT(*) n FROM posts WHERE user_id = ?').get(u.id).n >= MAX_POSTS) throw new H.HttpError(409, 'limit', 'You have reached the post limit. Delete old posts first.');
-    const post = savePostRow(db, u.id, cleanPost(C, id, b.post));
+    let existing = null;
+    if (owner) { try { existing = JSON.parse(owner.data); } catch (e) { existing = null; } }
+    const wanted = b.post && b.post.status;
+    const cleaned = cleanPost(C, id, { ...(b.post || {}), status: SERVER_STATUSES.includes(wanted) ? (existing && !SERVER_STATUSES.includes(existing.status) ? existing.status : 'draft') : wanted });
+    const merged = mergeServerFields(cleaned, existing);
+    if (wanted === 'failed' && existing && existing.status === 'failed') merged.status = 'failed';
+    const post = savePostRow(db, u.id, merged);
     if (!owner && post.status !== 'draft') ctx.log({ actorId: u.id, targetId: id, action: 'post.' + post.status, detail: post.networks.join(','), ip: req.ip });
     H.sendJson(res, 200, { post });
   });
 
   r.del('/api/posts/:id', async (req, res, { id }) => {
     const u = ctx.requireUser(req);
+    const row = db.prepare('SELECT status FROM posts WHERE id = ? AND user_id = ?').get(id, u.id);
+    if (row && row.status === 'publishing') throw new H.HttpError(409, 'busy', 'This post is being published right now.');
     db.prepare('DELETE FROM posts WHERE id = ? AND user_id = ?').run(id, u.id);
     H.sendJson(res, 200, { ok: true });
   });

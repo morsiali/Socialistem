@@ -40,6 +40,10 @@ DNS usually updates within minutes, sometimes up to a few hours.
 - Member app: https://socialistem.com/app
 - Change the admin password from **Account** after the first login.
 
+## 6. Switch on live publishing
+Follow **CHANNELS.md** to create the LinkedIn, Meta, X and Threads developer apps and add their keys in
+Render → Environment. Each network appears for members as soon as its keys are saved.
+
 ## Updating the site later
 Push to the GitHub repository; Render redeploys automatically. The database lives on the disk at
 `/var/data` and survives deploys. Take a manual backup from Render's **Disks → Snapshots**.
