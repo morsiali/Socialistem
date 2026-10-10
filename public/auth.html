@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Log in · Socialistem</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap">
+<link rel="stylesheet" href="/assets/styles.css">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body class="site" data-page="auth">
+<div class="auth">
+  <aside class="auth-side" aria-hidden="true">
+    <a class="brand" href="/"><img class="brand-mark" src="/assets/favicon.svg" alt=""><span class="brand-name">Socialistem</span></a>
+    <div class="auth-quote">
+      <p class="big">Say it once.<br>Post it everywhere.</p>
+      <p>Native posts for eight channels, written by AI, scheduled at the right time, with one inbox for every reply.</p>
+    </div>
+    <div class="auth-rings"></div>
+  </aside>
+  <main class="auth-main">
+    <a class="brand auth-mobile-brand" href="/"><img class="brand-mark" src="/assets/favicon.svg" alt=""><span class="brand-name">Socialistem</span></a>
+    <form class="auth-form" id="auth-form" novalidate>
+      <h1 id="auth-title">Log in</h1>
+      <p class="sub" id="auth-sub">Welcome back. Pick up where you left off.</p>
+      <div class="banner err" id="auth-error" role="alert" hidden><div class="grow" id="auth-error-text"></div></div>
+      <div class="field" id="f-name" hidden><label class="lbl" for="name">Your name</label><input class="input" id="name" autocomplete="name" maxlength="80"></div>
+      <div class="field"><label class="lbl" for="email">Email</label><input class="input" id="email" type="email" autocomplete="email" required maxlength="254"></div>
+      <div class="field"><label class="lbl" for="password">Password</label><input class="input" id="password" type="password" autocomplete="current-password" required minlength="8"><span class="sub" id="pw-hint" hidden>At least 8 characters, with a letter and a number.</span></div>
+      <div class="field" id="f-brand" hidden><label class="lbl" for="brand">Brand or company <span class="muted">(optional)</span></label><input class="input" id="brand" autocomplete="organization" maxlength="80"></div>
+      <button class="btn primary auth-submit" type="submit" id="auth-submit">Log in</button>
+      <p class="sub auth-switch" id="auth-switch"></p>
+      <p class="sub" id="auth-help"></p>
+    </form>
+  </main>
+</div>
+<script src="/assets/site.js"></script>
+</body>
+</html>

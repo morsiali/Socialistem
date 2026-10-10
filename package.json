@@ -1,0 +1,15 @@
+{
+  "name": "socialistem",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Socialistem: AI social media management platform",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test --test-concurrency=1 test/*.test.js",
+    "build:preview": "node scripts/build-preview.js",
+    "create-admin": "node scripts/create-admin.js"
+  },
+  "license": "UNLICENSED"
+}

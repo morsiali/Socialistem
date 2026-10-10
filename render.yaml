@@ -1,0 +1,37 @@
+# Render Blueprint: New > Blueprint > pick this repository. Render asks for the values marked sync: false.
+services:
+  - type: web
+    name: socialistem
+    runtime: node
+    plan: 0.5c-512mb          # smallest paid instance; persistent disks need a paid plan
+    region: frankfurt          # closest Render region to the Gulf; cannot be changed later
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    domains:
+      - socialistem.com        # Render adds the www.socialistem.com redirect automatically
+    disk:
+      name: socialistem-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATA_DIR
+        value: /var/data
+      - key: PUBLIC_URL
+        value: https://socialistem.com
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SUPPORT_EMAIL
+        sync: false
+      - key: AI_MODEL_FAST
+        value: claude-haiku-5-5
+      - key: AI_MODEL_BEST
+        value: claude-sonnet-5-5

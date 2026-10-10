@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Socialistem: AI social media management</title>
+<meta name="description" content="Say it once, post it everywhere. Socialistem writes native posts for every channel with AI, schedules them at the right time, and brings every comment into one inbox.">
+<meta property="og:title" content="Socialistem">
+<meta property="og:description" content="AI social media management: write once, publish everywhere, answer every comment.">
+<meta property="og:url" content="https://www.socialistem.com/">
+<meta property="og:type" content="website">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap">
+<link rel="stylesheet" href="/assets/styles.css">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body class="site" data-page="landing">
+<header class="site-nav">
+  <a class="brand" href="/">
+    <img class="brand-mark" src="/assets/favicon.svg" alt="">
+    <span class="brand-name">Socialistem</span>
+  </a>
+  <nav class="site-links" aria-label="Sections"><a href="#features">Features</a><a href="#how">How it works</a><a href="#channels">Channels</a></nav>
+  <div class="site-auth"><a class="btn ghost" href="/login" id="nav-login">Log in</a><a class="btn primary" href="/signup" id="nav-cta">Get started</a></div>
+</header>
+
+<main>
+  <section class="s-hero" aria-labelledby="hero-title">
+    <p class="eyebrow">AI social media studio · Early access</p>
+    <h1 id="hero-title">Say it once.<br><span>Post it everywhere.</span></h1>
+    <p class="lede">Socialistem turns one sentence into native posts for Instagram, LinkedIn, X, TikTok and more. It checks every limit, books the best time to publish, and helps you answer every comment.</p>
+    <form class="prompt" id="hero-form">
+      <label class="sr" for="idea">What do you want to post?</label>
+      <textarea id="idea" rows="3" placeholder="e.g. Announce our weekend cold brew. Playful, mention it's dairy-free."></textarea>
+      <div class="prompt-bar">
+        <div class="chips" aria-label="Channels it will write for">
+          <span class="chip"><span class="net net-instagram">IG</span>Instagram</span>
+          <span class="chip"><span class="net net-linkedin">in</span>LinkedIn</span>
+          <span class="chip"><span class="net net-x">X</span>X</span>
+          <span class="chip"><span class="net net-tiktok">TT</span>TikTok</span>
+        </div>
+        <div class="prompt-actions"><button class="btn ai" type="submit"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg>Write my posts</button></div>
+      </div>
+    </form>
+    <p class="fine">Free during early access. No card needed.</p>
+
+    <div class="echo" aria-label="Example: one idea written for three channels">
+      <div class="echo-in"><span class="eyebrow">Your idea</span><p>Launch our date-syrup cold brew this weekend. Dairy-free, 18-hour steep.</p></div>
+      <div class="echo-out">
+        <article class="echo-card"><header><span class="net net-instagram">IG</span><b>Instagram</b><small>214 / 2,200</small></header><p>Cold brew season never really ends here. ☀️ Our new date-syrup cold brew steeps for 18 hours and is sweetened only with dates. Dairy-free, and worth the walk. <span class="tag">#ColdBrew</span> <span class="tag">#DubaiCoffee</span></p></article>
+        <article class="echo-card"><header><span class="net net-linkedin">in</span><b>LinkedIn</b><small>402 / 3,000</small></header><p>We spent three months on one question: can cold brew be sweet without refined sugar? This weekend we launch our answer, sweetened only with local dates…</p></article>
+        <article class="echo-card"><header><span class="net net-x">X</span><b>X</b><small>118 / 280</small></header><p>18 hours of steeping. Zero refined sugar. Our date-syrup cold brew lands Saturday. ☕</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" class="s-section" aria-labelledby="f-title">
+    <p class="eyebrow">Features</p>
+    <h2 id="f-title">Everything social, in one calm place.</h2>
+    <div class="f-grid">
+      <article class="f-card f-wide"><span class="badge ai">AI</span><h3>Write once, native everywhere</h3><p>One brief becomes a post shaped for each channel: hooks, line breaks, hashtags and length, checked against every limit before you schedule.</p></article>
+      <article class="f-card"><h3>Queue &amp; calendar</h3><p>Set your posting times once. New posts drop into the next free slot, and empty slots can fill themselves with AI.</p></article>
+      <article class="f-card"><h3>Team approvals</h3><p>Turn on approvals and nothing goes live until someone signs off.</p></article>
+      <article class="f-card"><h3>One inbox</h3><p>Comments, messages, mentions and reviews together, with three suggested replies in your brand voice.</p></article>
+      <article class="f-card"><h3>Analytics</h3><p>Reach, engagement and the hours your audience is most active, with a plain-language brief on what to do next.</p></article>
+      <article class="f-card"><h3>Listening</h3><p>Track keywords, sentiment, rising topics and competitors, then draft a post from any trend.</p></article>
+      <article class="f-card"><span class="badge ai">AI</span><h3>An assistant that knows your workspace</h3><p>Ask what to post this week. It answers with your own numbers and saves drafts for you.</p></article>
+      <article class="f-card f-full"><h3>Arabic and English, side by side</h3><p dir="auto">Write in either language, translate in one click, or publish bilingual posts. قل ما تريد مرة واحدة، ونحن نكتبه لكل منصة.</p></article>
+    </div>
+  </section>
+
+  <section id="how" class="s-section" aria-labelledby="h-title">
+    <p class="eyebrow">How it works</p>
+    <h2 id="h-title">From one sentence to a full week of posts.</h2>
+    <ol class="flow">
+      <li><b>Idea</b><span>Type it, pick a trend, or pull a card from your Ideas board</span></li>
+      <li><b>Write</b><span>AI drafts a native post for every channel you choose</span></li>
+      <li><b>Polish</b><span>Sharper hooks, shorter, more formal, Arabic or English</span></li>
+      <li><b>Schedule</b><span>Next free slot, a time you pick, or send for approval</span></li>
+      <li><b>Engage</b><span>Reply to everyone from one inbox</span></li>
+      <li><b>Learn</b><span>See what worked and let it shape the next idea</span></li>
+    </ol>
+  </section>
+
+  <section id="channels" class="s-section s-channels" aria-labelledby="c-title">
+    <p class="eyebrow">Channels</p>
+    <h2 id="c-title">Eight channels, each with its own rules.</h2>
+    <div class="chips big">
+      <span class="chip"><span class="net net-instagram lg">IG</span>Instagram</span><span class="chip"><span class="net net-facebook lg">FB</span>Facebook</span>
+      <span class="chip"><span class="net net-linkedin lg">in</span>LinkedIn</span><span class="chip"><span class="net net-x lg">X</span>X</span>
+      <span class="chip"><span class="net net-tiktok lg">TT</span>TikTok</span><span class="chip"><span class="net net-threads lg">Th</span>Threads</span>
+      <span class="chip"><span class="net net-youtube lg">YT</span>YouTube Shorts</span><span class="chip"><span class="net net-pinterest lg">Pin</span>Pinterest</span>
+    </div>
+    <p class="sub">Character limits, link weighting on X, hashtag caps on Instagram and media rules are checked for you.</p>
+  </section>
+
+  <section class="s-cta" aria-labelledby="cta-title">
+    <h2 id="cta-title">Your next post is one sentence away.</h2>
+    <div class="vh-actions"><a class="btn primary" href="/signup">Get started free</a><a class="btn" href="/login">Log in</a></div>
+  </section>
+</main>
+
+<footer class="site-foot">
+  <span>© <span id="year">2026</span> Socialistem</span>
+  <nav aria-label="Footer"><a href="/login">Log in</a><a href="/signup">Sign up</a><span id="support"></span></nav>
+</footer>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script src="/assets/site.js"></script>
+</body>
+</html>

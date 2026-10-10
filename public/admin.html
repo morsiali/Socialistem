@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Admin · Socialistem</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap">
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<div class="app" id="app" data-mode="admin">
+  <aside class="rail" id="rail" aria-label="Admin navigation">
+    <a class="brand" href="#overview" data-go="overview">
+      <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true">
+        <rect width="40" height="40" rx="11" style="fill:var(--ink)"/>
+        <circle cx="13" cy="20" r="3.6" style="fill:var(--surface)"/>
+        <path d="M19 12.5a10.5 10.5 0 0 1 0 15" style="fill:none;stroke:var(--surface);stroke-width:2.6;stroke-linecap:round"/>
+        <path d="M24.5 8a17 17 0 0 1 0 24" style="fill:none;stroke:var(--surface);stroke-width:2.6;stroke-linecap:round;opacity:.6"/>
+      </svg>
+      <span><span class="brand-name">Socialistem</span><br><span class="brand-ar">Admin console</span></span>
+    </a>
+    <nav class="nav" id="nav"></nav>
+    <div class="rail-foot" id="rail-foot"></div>
+  </aside>
+  <div class="scrim" id="scrim" hidden></div>
+  <main class="main">
+    <header class="topbar">
+      <button class="iconbtn" data-act="menu" aria-label="Open menu"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <a class="brand" href="#overview" data-go="overview"><span class="brand-name">Admin</span></a>
+      <span class="spacer"></span>
+      <a class="btn sm" href="/app">Member app</a>
+    </header>
+    <div class="view" id="view"></div>
+  </main>
+</div>
+<div id="drawer-root"></div>
+<div id="tip" class="tip" role="tooltip" hidden></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script src="/assets/core.js"></script>
+<script src="/assets/admin.js"></script>
+</body>
+</html>
