@@ -1083,7 +1083,7 @@ function channelsCard() {
   return `<article class="card span2"><div class="card-head"><div><p class="eyebrow">Your connected world</p><h2>Every channel. One place.</h2><p class="sub">Connect through secure authorization. Your social passwords stay with each platform.</p></div><button class="btn sm" data-act="ch-refresh">Refresh accounts</button></div>
     ${ch.practiceMode ? `<div class="banner" style="margin:0 0 12px">${ic('info')}<div class="grow"><b>Practice mode is on.</b> Posts to channels you have not connected are marked as published without going live.</div></div>` : ''}
     <div class="prov-grid">${provs.map(card).join('')}</div>
-    <p class="sub" style="margin-top:12px">Coming later: ${soon.map(n => esc(n.name)).join(', ')}.</p></article>`;
+    ${soon.length ? `<p class="sub" style="margin-top:12px">Coming later: ${soon.map(n => esc(n.name)).join(', ')}.</p>` : ''}</article>`;
 }
 
 /* ---------------- Account (socialistem.com only) ---------------- */
